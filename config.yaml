@@ -1,0 +1,69 @@
+version: "1.0"
+
+# ── Execution ─────────────────────────────────────────────────────────────────
+# mode: sequential  → runs subtasks one at a time (safe for single-GPU laptops)
+# mode: parallel    → runs independent subtasks concurrently (faster, needs more RAM)
+execution:
+  mode: sequential
+  pass_context: false       # feed prior subtask outputs to next model in sequential mode
+  timeout_per_task: 120     # seconds before fallback kicks in
+  max_retries: 2
+
+# ── Analyzer ──────────────────────────────────────────────────────────────────
+# Small fast model — reads the prompt and produces the subtask plan
+analyzer:
+  model: llama3.2:3b
+  provider: ollama
+  base_url: http://host.docker.internal:11434
+
+# ── Synthesizer ───────────────────────────────────────────────────────────────
+# Stronger model — merges all specialist outputs into the final response
+synthesizer:
+  model: mistralai/mistral-7b-instruct
+  provider: openrouter
+  api_key: ${OPENROUTER_API_KEY}
+
+# ── Specialists ───────────────────────────────────────────────────────────────
+# Map each domain tag to the model best suited for it
+specialists:
+  code:
+    model: deepseek-coder:6.7b
+    provider: ollama
+    base_url: http://host.docker.internal:11434
+    fallback: deepseek/deepseek-coder    # openrouter fallback if ollama fails
+
+  math:
+    model: qwen2.5-math:7b
+    provider: ollama
+    base_url: http://host.docker.internal:11434
+    fallback: qwen/qwen-2.5-7b-instruct
+
+  creative:
+    model: mistralai/mistral-7b-instruct
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+
+  research:
+    model: meta-llama/llama-3.1-8b-instruct
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+
+  summarization:
+    model: meta-llama/llama-3.1-8b-instruct
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+
+  translation:
+    model: mistralai/mistral-7b-instruct
+    provider: openrouter
+    api_key: ${OPENROUTER_API_KEY}
+
+  general:
+    model: llama3.2:3b
+    provider: ollama
+    base_url: http://host.docker.internal:11434
+
+  qa:
+    model: llama3.2:3b
+    provider: ollama
+    base_url: http://host.docker.internal:11434
