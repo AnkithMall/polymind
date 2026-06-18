@@ -10,9 +10,46 @@ import litellm
 import yaml
 
 from polymind.core.fallback import retry_with_backoff
+from polymind.core.providers import LOCAL_PROVIDERS, ProviderType
 from polymind.core.types import ALL_DOMAINS, DomainType, RankEntry, RankStore
 
 logger = logging.getLogger(__name__)
+
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "openai/gpt-4o": (2.50, 10.00),
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "openai/gpt-3.5-turbo": (0.50, 1.50),
+    "anthropic/claude-3-opus-20240229": (15.00, 75.00),
+    "anthropic/claude-3-sonnet-20240229": (3.00, 15.00),
+    "anthropic/claude-3-haiku-20240307": (0.25, 1.25),
+    "anthropic/claude-3-5-sonnet-20241022": (3.00, 15.00),
+    "anthropic/claude-3-5-haiku-20241022": (0.80, 4.00),
+    "openrouter/mixtral-8x7b-instruct": (0.24, 0.24),
+    "openrouter/mistral-7b-instruct": (0.04, 0.04),
+    "openrouter/llama-3.1-70b": (0.23, 0.50),
+    "openrouter/llama-3.1-8b": (0.02, 0.06),
+}
+
+
+def get_model_pricing(model: str) -> tuple[float, float]:
+    if "/" in model:
+        provider_prefix = model.split("/", 1)[0]
+        try:
+            ptype = ProviderType(provider_prefix)
+            if ptype in LOCAL_PROVIDERS:
+                return (0.0, 0.0)
+        except ValueError:
+            pass
+    if model in MODEL_PRICING:
+        return MODEL_PRICING[model]
+    return (0.0, 0.0)
+
+
+def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    input_price, output_price = get_model_pricing(model)
+    return (input_tokens / 1000.0 * input_price) + (
+        output_tokens / 1000.0 * output_price
+    )
 
 
 @dataclass
@@ -386,6 +423,7 @@ async def run_benchmark(
 
             domain_scores: list[float] = []
             total_latency = 0.0
+            total_cost = 0.0
             errors = 0
 
             for task_idx, task in enumerate(tasks):
@@ -402,16 +440,20 @@ async def run_benchmark(
                 try:
                     start = time.monotonic()
 
-                    async def _call() -> str:
+                    async def _call() -> tuple[str, int | None, int | None]:
                         response = await litellm.acompletion(
                             model=model,
                             messages=[{"role": "user", "content": task.prompt}],
                             max_tokens=512,
                             temperature=0.0,
                         )
-                        return response.choices[0].message.content or ""
+                        content = response.choices[0].message.content or ""
+                        usage = getattr(response, "usage", None)
+                        in_tokens = usage.prompt_tokens if usage else None
+                        out_tokens = usage.completion_tokens if usage else None
+                        return content, in_tokens, out_tokens
 
-                    output = await retry_with_backoff(
+                    output, in_tokens, out_tokens = await retry_with_backoff(
                         _call, max_retries=2, base_delay_s=1.0
                     )
                     elapsed = (time.monotonic() - start) * 1000
@@ -419,6 +461,11 @@ async def run_benchmark(
                     score = await score_task(output, task, task.prompt, judge_model)
                     domain_scores.append(score)
                     total_latency += elapsed
+                    if in_tokens is not None and out_tokens is not None:
+                        task_cost = calculate_cost(model, in_tokens, out_tokens)
+                    else:
+                        task_cost = 0.0
+                    total_cost += task_cost
                 except Exception as e:
                     logger.error("Benchmark task failed: %s", e)
                     domain_scores.append(0.0)
@@ -427,12 +474,14 @@ async def run_benchmark(
             if domain_scores:
                 avg_score = sum(domain_scores) / len(domain_scores)
                 avg_latency = total_latency / len(domain_scores)
+                avg_cost = total_cost / len(domain_scores) if total_cost > 0 else 0.0
                 entries.append(
                     RankEntry(
                         model=model,
                         domain=domain,
                         score=round(avg_score, 4),
                         latency_ms=round(avg_latency, 2),
+                        cost=round(avg_cost, 8),
                     )
                 )
 

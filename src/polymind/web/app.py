@@ -49,6 +49,9 @@ async def get_config():
         "verbose": config.verbose,
         "profile": config.profile,
         "keep_alive": config.keep_alive,
+        "litellm_proxy": config.litellm_proxy,
+        "ranking_mode": config.ranking_mode.value,
+        "model_source": config.model_source.value,
     }
 
 
@@ -81,7 +84,11 @@ async def ask_endpoint(request: Request):
 
             rank_store = load_ranks(RANKS_PATH)
             schedule = build_schedule(
-                plan, rank_store=rank_store, strategy=config.scheduler.strategy
+                plan,
+                rank_store=rank_store,
+                strategy=config.scheduler.strategy,
+                ranking_mode=config.ranking_mode,
+                model_source=config.model_source,
             )
 
             schedule_data = [

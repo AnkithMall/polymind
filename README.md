@@ -253,7 +253,7 @@ polymind/
 │       └── static/
 │           └── index.html          #   SPA with chat + pipeline panel
 │
-└── tests/                          # 114 tests across all modules
+└── tests/                          # 114+ tests across all modules
     ├── test_types.py
     ├── test_config.py
     ├── test_providers.py
@@ -277,7 +277,8 @@ polymind/
 A lightweight router LLM reads the prompt and emits a structured JSON plan: a list of subtasks with domain tags and dependency edges. If the router is unavailable or returns invalid JSON, PolyMind falls back to a single-task plan with domain `general`.
 
 ### 2. Schedule (`core/scheduler.py`)
-- **Model assignment**: each subtask's domain is looked up in `ranks.yaml`; the highest-scoring available model is assigned
+- **Model assignment**: each subtask's domain is looked up in `ranks.yaml`; the best model is assigned based on the configured `ranking_mode` (accuracy, cost, or cost_effective)
+- **Model source filter**: models can be restricted to `local`, `online`, or `all` via the `model_source` config option
 - **DAG construction**: dependency edges form a directed acyclic graph
 - **Topological sort**: Kahn's algorithm produces a valid execution order
 - **Lookahead batching**: when loading a model, all ready tasks using that model are batched together, minimising VRAM swaps
@@ -309,6 +310,10 @@ A configurable synthesizer model receives the original prompt and all subtask ou
 |---------|------|-------------|
 | **Prompt Decomposition** | `core/analyzer.py` | Router LLM breaks prompts into typed subtasks with dependency graphs |
 | **Model Benchmarking** | `core/benchmark.py` | 9 domains × 5 benchmark tasks; exact-match + LLM-as-judge scoring |
+| **Cost Tracking** | `core/benchmark.py` | Tracks token usage and computes cost per model during benchmarks |
+| **Cost-Based Ranking** | `core/types.py` | Ranking modes: `accuracy`, `cost`, `cost_effective` (accuracy ÷ cost) |
+| **Model Source Filter** | `core/scheduler.py` | Filter models by source: `local`, `online`, or `all` |
+| **LiteLLM Proxy** | `core/config.py` | Route all calls through a LiteLLM proxy server |
 | **Smart Scheduling** | `core/scheduler.py` | DAG-based model-aware batching reduces VRAM load events by 40-60% |
 | **Multi-Provider** | `core/providers.py` | Ollama, LM Studio, OpenRouter, OpenAI, Anthropic via LiteLLM |
 | **Fallback Chain** | `core/fallback.py` | Retry with backoff → fallback model → error result |
@@ -433,6 +438,9 @@ data_dir: ~/.polymind
 verbose: false
 profile: null
 keep_alive: null
+litellm_proxy: null              # LiteLLM proxy base URL (e.g. http://localhost:4000)
+ranking_mode: accuracy           # accuracy | cost | cost_effective
+model_source: all                # local | online | all
 ```
 
 ### `~/.polymind/ranks.yaml`
@@ -445,12 +453,20 @@ entries:
     domain: code
     score: 0.85
     latency_ms: 2340.5
+    cost: 0.0                   # $0 for local models
     timestamp: "2026-06-18T09:30:00"
   - model: ollama/mistral
     domain: code
     score: 0.92
     latency_ms: 1890.2
+    cost: 0.0
     timestamp: "2026-06-18T09:35:00"
+  - model: openai/gpt-4o-mini
+    domain: code
+    score: 0.97
+    latency_ms: 870.2
+    cost: 0.000423               # $0.0004 per task
+    timestamp: "2026-06-18T09:40:00"
 ```
 
 ### Routing Profiles
@@ -462,6 +478,34 @@ entries:
 | `private` | sequential | Fully offline |
 
 Set via config: `profile: quality`
+
+### Ranking Modes
+
+| Mode | Behaviour | Formula |
+|------|-----------|---------|
+| `accuracy` | Highest benchmark score wins (default) | `score` |
+| `cost` | Lowest cost per task wins | `-(cost)` |
+| `cost_effective` | Best accuracy per dollar | `score / cost` |
+
+When `ranking_mode` is set to `cost` or `cost_effective`, benchmark cost data is required for all models. Local models (Ollama, LM Studio) cost \$0. Online model pricing is built-in for common models (GPT-4o, Claude, etc.).
+
+### Model Source Filter
+
+| Value | Behaviour |
+|-------|-----------|
+| `all` | Use any provider's models (default) |
+| `local` | Only use local models (Ollama, LM Studio) |
+| `online` | Only use online models (OpenAI, Anthropic, OpenRouter) |
+
+### LiteLLM Proxy
+
+Set `litellm_proxy` to a base URL to route all LLM calls through a [LiteLLM proxy](https://litellm.vercel.app/docs/proxy/proxy_server):
+
+```yaml
+litellm_proxy: "http://localhost:4000"
+```
+
+This is useful for centralized API key management, rate limiting, and cost tracking across your team.
 
 ### Environment Variables
 
@@ -519,11 +563,13 @@ polymind status
 | **Multi-model orchestration** | ✅ Automatic | ❌ Single model | ❌ Manual | ✅ Requires code | ❌ Single model |
 | **Local-first** | ✅ Full offline | ❌ Cloud-only | ✅ | ✅ | ❌ |
 | **Model benchmarking** | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
+| **Cost-based ranking** | ✅ accuracy / cost / cost_effective | ❌ | ❌ | ❌ | ❌ |
 | **Task decomposition** | ✅ Auto | ❌ Manual | ❌ | ❌ | ❌ |
 | **VRAM-aware scheduling** | ✅ DAG + lookahead | ❌ | ❌ | ❌ | ❌ |
 | **CLI / TUI / Web** | ✅ All three | ❌ Web-only | ❌ CLI only | ❌ Library only | ❌ API only |
 | **Hardware profiling** | ✅ Auto-recommend | ❌ | ❌ | ❌ | ❌ |
 | **Provider agnostic** | ✅ Ollama/LM Studio/OpenAI/Anthropic | ❌ | ❌ Ollama only | ✅ | ❌ |
+| **LiteLLM proxy support** | ✅ | ❌ | ❌ | ✅ | ❌ |
 | **Context budget mgmt** | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ### Are there tools that achieve the same goal with better performance?

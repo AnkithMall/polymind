@@ -7,6 +7,18 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class RankingMode(str, Enum):
+    accuracy = "accuracy"
+    cost = "cost"
+    cost_effective = "cost_effective"
+
+
+class ModelSource(str, Enum):
+    local = "local"
+    online = "online"
+    all = "all"
+
+
 class DomainType(str, Enum):
     code = "code"
     math = "math"
@@ -35,27 +47,46 @@ class AnalyzerPlan(BaseModel):
     subtasks: list[Subtask]
 
 
+def _rank_key(entry: RankEntry, mode: RankingMode) -> float:
+    if mode == RankingMode.cost:
+        return -(entry.cost or 0.0)
+    if mode == RankingMode.cost_effective:
+        eff = entry.score / max(entry.cost or 0.001, 0.001)
+        return eff
+    return entry.score
+
+
 class RankEntry(BaseModel):
     model: str
     domain: DomainType
     score: float = Field(ge=0.0, le=1.0)
     latency_ms: float | None = None
+    cost: float | None = None
     timestamp: datetime = Field(default_factory=datetime.now)
 
 
 class RankStore(BaseModel):
     entries: list[RankEntry] = Field(default_factory=list)
 
-    def top_for_domain(self, domain: DomainType) -> RankEntry | None:
+    def top_for_domain(
+        self,
+        domain: DomainType,
+        ranking_mode: RankingMode = RankingMode.accuracy,
+    ) -> RankEntry | None:
         candidates = [e for e in self.entries if e.domain == domain]
         if not candidates:
             return None
-        return max(candidates, key=lambda e: e.score)
+        return max(candidates, key=lambda e: _rank_key(e, ranking_mode))
 
-    def top_n_for_domain(self, domain: DomainType, n: int) -> list[RankEntry]:
+    def top_n_for_domain(
+        self,
+        domain: DomainType,
+        n: int,
+        ranking_mode: RankingMode = RankingMode.accuracy,
+    ) -> list[RankEntry]:
         candidates = sorted(
             (e for e in self.entries if e.domain == domain),
-            key=lambda e: e.score,
+            key=lambda e: _rank_key(e, ranking_mode),
             reverse=True,
         )
         return candidates[:n]
@@ -90,6 +121,9 @@ class SubtaskResult(BaseModel):
     latency_ms: float | None = None
     error: str | None = None
     token_count: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost: float | None = None
 
 
 class PipelineResult(BaseModel):

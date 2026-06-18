@@ -103,6 +103,8 @@ async def _async_ask(
         plan,
         rank_store=rank_store,
         strategy=config.scheduler.strategy,
+        ranking_mode=config.ranking_mode,
+        model_source=config.model_source,
     )
 
     if model:
@@ -241,6 +243,7 @@ def _print_ranks(store):
     table.add_column("Model", style="yellow")
     table.add_column("Score", justify="right")
     table.add_column("Latency")
+    table.add_column("Cost", justify="right")
     table.add_column("Age")
 
     now = datetime.now()
@@ -248,6 +251,7 @@ def _print_ranks(store):
         age_days = (now - entry.timestamp).days if entry.timestamp else 0
         age_str = f"{age_days}d" if age_days > 0 else "today"
         lat = f"{entry.latency_ms:.0f}ms" if entry.latency_ms else "-"
+        cost_str = f"${entry.cost:.6f}" if entry.cost is not None else "-"
         score_str = f"{entry.score:.2f}"
         score_style = (
             "green" if entry.score >= 0.8 else "yellow" if entry.score >= 0.5 else "red"
@@ -257,6 +261,7 @@ def _print_ranks(store):
             entry.model,
             Text(score_str, style=score_style),
             lat,
+            cost_str,
             age_str,
         )
 
@@ -284,6 +289,18 @@ def config_init():
         choices=["model_aware", "sequential", "parallel"],
         default="model_aware",
     )
+    ranking_mode = Prompt.ask(
+        "Ranking mode",
+        choices=["accuracy", "cost", "cost_effective"],
+        default="accuracy",
+    )
+    model_source = Prompt.ask(
+        "Model source filter",
+        choices=["all", "local", "online"],
+        default="all",
+    )
+    proxy = Prompt.ask("LiteLLM proxy base URL (optional)", default="")
+    litellm_proxy = proxy.strip() or None
 
     config = Config(
         models=[{"name": model_name, "provider": "ollama"}],
@@ -291,6 +308,9 @@ def config_init():
         synthesizer_model=router,
         judge_model=router,
         scheduler={"strategy": strategy, "pass_context": True},
+        ranking_mode=ranking_mode,
+        model_source=model_source,
+        litellm_proxy=litellm_proxy,
     )
     config.to_yaml(CONFIG_PATH)
     console.print(f"\n[green]Config written to {CONFIG_PATH}[/]")
@@ -304,6 +324,10 @@ def status():
         console.print("[green]Config:[/] Found")
         console.print(f"  Router: [cyan]{config.router_model}[/]")
         console.print(f"  Strategy: [cyan]{config.scheduler.strategy.value}[/]")
+        console.print(f"  Ranking mode: [cyan]{config.ranking_mode.value}[/]")
+        console.print(f"  Model source: [cyan]{config.model_source.value}[/]")
+        if config.litellm_proxy:
+            console.print(f"  Proxy: [cyan]{config.litellm_proxy}[/]")
         console.print(f"  Models configured: {len(config.models)}")
     else:
         console.print("[yellow]Config: Not found[/]")
