@@ -294,7 +294,11 @@ class PolyMindApp(App):
             ranks_path = Path("~/.polymind/ranks.yaml").expanduser()
             rank_store = load_ranks(ranks_path)
             schedule = build_schedule(
-                plan, rank_store=rank_store, strategy=self.strategy
+                plan,
+                rank_store=rank_store,
+                strategy=self.strategy,
+                ranking_mode=self.config.ranking_mode,
+                model_source=self.config.model_source,
             )
             pipeline.log_line(f"[cyan]Schedule:[/] {self.strategy.value}")
             for batch in schedule.batches:

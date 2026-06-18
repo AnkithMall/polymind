@@ -17,7 +17,14 @@ from polymind.core.context import (
 from polymind.core.executor import execute_subtask, execute_subtask_with_context
 from polymind.core.fallback import FallbackError, fallback_chain, retry_with_backoff
 from polymind.core.hardware import HardwareInfo, scan_hardware
-from polymind.core.providers import ProviderInfo, ProviderType, resolve_model_string
+from polymind.core.providers import (
+    ONLINE_PROVIDERS,
+    LOCAL_PROVIDERS,
+    ProviderInfo,
+    ProviderType,
+    provider_model_source,
+    resolve_model_string,
+)
 from polymind.core.scheduler import build_schedule, count_model_loads
 from polymind.core.synthesizer import synthesize, synthesize_streaming
 from polymind.core.types import (
@@ -27,8 +34,10 @@ from polymind.core.types import (
     ExecutionSchedule,
     ExecutionStrategy,
     ModelBatch,
+    ModelSource,
     PipelineResult,
     RankEntry,
+    RankingMode,
     RankStore,
     Subtask,
     SubtaskResult,
@@ -46,12 +55,16 @@ __all__ = [
     "ExecutionStrategy",
     "FallbackError",
     "HardwareInfo",
+    "LOCAL_PROVIDERS",
     "ModelBatch",
     "ModelConfig",
+    "ModelSource",
+    "ONLINE_PROVIDERS",
     "PipelineResult",
     "ProviderInfo",
     "ProviderType",
     "RankEntry",
+    "RankingMode",
     "RankStore",
     "SchedulerConfig",
     "Subtask",
@@ -66,6 +79,7 @@ __all__ = [
     "get_model_context_limit",
     "get_tasks_for_domain",
     "load_ranks",
+    "provider_model_source",
     "resolve_model_string",
     "retry_with_backoff",
     "run_benchmark",

@@ -6,6 +6,7 @@ from typing import Any
 
 import litellm
 
+from polymind.core.benchmark import calculate_cost
 from polymind.core.fallback import retry_with_backoff
 from polymind.core.providers import ProviderInfo, resolve_model_string
 from polymind.core.types import Subtask, SubtaskResult
@@ -30,7 +31,7 @@ async def execute_subtask(
         kwargs["keep_alive"] = keep_alive
     kwargs.update(litellm_kwargs)
 
-    async def _call() -> str:
+    async def _call() -> tuple[str, int | None, int | None]:
         start = time.monotonic()
         response = await litellm.acompletion(
             model=model,
@@ -39,10 +40,13 @@ async def execute_subtask(
         )
         elapsed = time.monotonic() - start
         content: str = response.choices[0].message.content or ""
-        return content
+        usage = getattr(response, "usage", None)
+        in_tokens = usage.prompt_tokens if usage else None
+        out_tokens = usage.completion_tokens if usage else None
+        return content, in_tokens, out_tokens
 
     try:
-        output = await retry_with_backoff(
+        output, in_tokens, out_tokens = await retry_with_backoff(
             _call, max_retries=max_retries, base_delay_s=1.0
         )
     except Exception as e:
@@ -56,10 +60,17 @@ async def execute_subtask(
             error=str(e),
         )
 
+    task_cost = None
+    if in_tokens is not None and out_tokens is not None:
+        task_cost = round(calculate_cost(model, in_tokens, out_tokens), 10)
+
     return SubtaskResult(
         subtask_id=subtask.id,
         model=model,
         output=output,
+        input_tokens=in_tokens,
+        output_tokens=out_tokens,
+        cost=task_cost,
     )
 
 

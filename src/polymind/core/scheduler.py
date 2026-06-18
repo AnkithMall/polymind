@@ -3,12 +3,20 @@ from __future__ import annotations
 import logging
 from collections import deque
 
+from polymind.core.providers import (
+    ONLINE_PROVIDERS,
+    ProviderType,
+    provider_model_source,
+    resolve_model_string,
+)
 from polymind.core.types import (
     AnalyzerPlan,
     DomainType,
     ExecutionSchedule,
     ExecutionStrategy,
     ModelBatch,
+    ModelSource,
+    RankingMode,
     RankStore,
     Subtask,
 )
@@ -16,35 +24,62 @@ from polymind.core.types import (
 logger = logging.getLogger(__name__)
 
 
+def _from_provider_type(ref: str) -> ProviderType:
+    if "/" in ref:
+        prov = ref.split("/", 1)[0]
+        try:
+            return ProviderType(prov)
+        except ValueError:
+            pass
+    return ProviderType.ollama
+
+
+def _model_matches_source(ref: str, source: ModelSource) -> bool:
+    if source == ModelSource.all:
+        return True
+    ptype = _from_provider_type(ref)
+    ms = provider_model_source(ptype)
+    return ms == source
+
+
 def _assign_models(
     plan: AnalyzerPlan,
     rank_store: RankStore | None,
     default_model: str,
     fallback_models: list[str] | None,
+    ranking_mode: RankingMode = RankingMode.accuracy,
+    model_source: ModelSource = ModelSource.all,
 ) -> None:
     for subtask in plan.subtasks:
         if subtask.assigned_model:
             continue
 
         if rank_store is not None:
-            top = rank_store.top_for_domain(subtask.domain)
-            if top is not None:
+            top = rank_store.top_for_domain(subtask.domain, ranking_mode=ranking_mode)
+            if top is not None and _model_matches_source(top.model, model_source):
                 subtask.assigned_model = top.model
                 continue
 
             fallback_entries = rank_store.top_n_for_domain(
-                subtask.domain, len(fallback_models or [])
+                subtask.domain, len(fallback_models or []), ranking_mode=ranking_mode
             )
             for i, entry in enumerate(fallback_entries):
                 try:
                     fallback_models[i]
                 except IndexError:
                     break
-                if entry.model != default_model:
+                if entry.model != default_model and _model_matches_source(
+                    entry.model, model_source
+                ):
                     subtask.assigned_model = fallback_models[i]
                     break
 
-        subtask.assigned_model = default_model
+        if subtask.assigned_model is None and not _model_matches_source(
+            default_model, model_source
+        ):
+            subtask.assigned_model = default_model
+        elif subtask.assigned_model is None:
+            subtask.assigned_model = default_model
 
 
 def _topological_batches(
@@ -161,8 +196,17 @@ def build_schedule(
     strategy: ExecutionStrategy = ExecutionStrategy.model_aware,
     default_model: str = "ollama/llama3.2:1b",
     fallback_models: list[str] | None = None,
+    ranking_mode: RankingMode = RankingMode.accuracy,
+    model_source: ModelSource = ModelSource.all,
 ) -> ExecutionSchedule:
-    _assign_models(plan, rank_store, default_model, fallback_models)
+    _assign_models(
+        plan,
+        rank_store,
+        default_model,
+        fallback_models,
+        ranking_mode=ranking_mode,
+        model_source=model_source,
+    )
 
     if strategy == ExecutionStrategy.sequential:
         batches = _sequential_batches(plan)

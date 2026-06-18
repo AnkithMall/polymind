@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from polymind.core.types import ModelSource
+
 
 class ProviderType(str, Enum):
     ollama = "ollama"
@@ -13,12 +15,30 @@ class ProviderType(str, Enum):
     anthropic = "anthropic"
 
 
+LOCAL_PROVIDERS = {ProviderType.ollama, ProviderType.lm_studio}
+ONLINE_PROVIDERS = {
+    ProviderType.openai,
+    ProviderType.anthropic,
+    ProviderType.openrouter,
+}
+
+
+def provider_model_source(provider: ProviderType) -> ModelSource:
+    if provider in LOCAL_PROVIDERS:
+        return ModelSource.local
+    return ModelSource.online
+
+
 @dataclass
 class ProviderInfo:
     provider: ProviderType
     model_name: str
     base_url: str | None = None
     api_key: str | None = None
+
+    @property
+    def model_source(self) -> ModelSource:
+        return provider_model_source(self.provider)
 
     @property
     def litellm_string(self) -> str:

@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
-from polymind.core.types import ExecutionStrategy
+from polymind.core.types import ExecutionStrategy, ModelSource, RankingMode
 
 
 ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
@@ -65,6 +65,9 @@ class Config(BaseModel):
     verbose: bool = False
     profile: str | None = None
     keep_alive: str | None = None
+    litellm_proxy: str | None = None
+    ranking_mode: RankingMode = RankingMode.accuracy
+    model_source: ModelSource = ModelSource.all
 
     def get_resolved_profile(self) -> dict[str, Any]:
         profiles: dict[str, dict[str, Any]] = {
@@ -88,6 +91,9 @@ class Config(BaseModel):
             "data_dir": self.data_dir,
             "verbose": self.verbose,
             "keep_alive": self.keep_alive,
+            "litellm_proxy": self.litellm_proxy,
+            "ranking_mode": self.ranking_mode.value,
+            "model_source": self.model_source.value,
         }
         if self.profile and self.profile in profiles:
             merged = {**base}
@@ -140,6 +146,9 @@ class Config(BaseModel):
                 "verbose": False,
                 "profile": None,
                 "keep_alive": None,
+                "litellm_proxy": None,
+                "ranking_mode": "accuracy",
+                "model_source": "all",
             },
             default_flow_style=False,
             sort_keys=False,
