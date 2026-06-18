@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolyMind</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #1f2335;
+    --surface2: #24283b;
+    --border: #3b4261;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --accent: #7aa2f7;
+    --accent2: #bb9af7;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --yellow: #e0af68;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 12px 20px; display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { font-size: 18px; color: var(--accent); }
+  header span { color: var(--text-dim); font-size: 13px; }
+  #status { margin-left: auto; font-size: 13px; color: var(--text-dim); }
+  #layout { display: flex; flex: 1; overflow: hidden; }
+  #chat-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  #pipeline-panel {
+    width: 380px; background: var(--surface); display: flex; flex-direction: column; font-size: 13px;
+  }
+  #pipeline-panel h3 {
+    padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--accent); font-size: 14px;
+  }
+  #pipeline-log { flex: 1; overflow-y: auto; padding: 8px 16px; }
+  .log-entry { padding: 4px 0; color: var(--text-dim); }
+  .log-entry.plan { color: var(--accent); }
+  .log-entry.ok { color: var(--green); }
+  .log-entry.err { color: var(--red); }
+  .log-entry.status { color: var(--yellow); }
+  #messages { flex: 1; overflow-y: auto; padding: 16px; }
+  .msg { margin-bottom: 16px; display: flex; }
+  .msg.user { justify-content: flex-end; }
+  .msg .bubble {
+    max-width: 80%; padding: 10px 14px; border-radius: 8px;
+    background: var(--surface2); border-left: 3px solid var(--accent2);
+    line-height: 1.5; white-space: pre-wrap;
+  }
+  .msg.user .bubble { border-left-color: var(--accent2); }
+  .msg.assistant .bubble { border-left-color: var(--accent); }
+  .msg .label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+  #input-area {
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 12px 16px; display: flex; gap: 8px;
+  }
+  #input-area input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 14px; border-radius: 6px; font-size: 14px; outline: none;
+  }
+  #input-area input:focus { border-color: var(--accent); }
+  #input-area button {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600;
+  }
+  #input-area button:disabled { opacity: .5; cursor: not-allowed; }
+  #input-area button:hover:not(:disabled) { opacity: .9; }
+  .section-title {
+    padding: 8px 16px 4px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 12px; padding: 0 16px; }
+  td { padding: 3px 8px; border-bottom: 1px solid var(--border); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PolyMind</h1>
+  <span>Multi-Specialist LLM Orchestrator</span>
+  <div id="status">Ready</div>
+</header>
+<div id="layout">
+  <div id="chat-panel">
+    <div id="messages"></div>
+    <div id="input-area">
+      <input id="prompt-input" type="text" placeholder="Type a message..." autofocus>
+      <button id="send-btn" onclick="send()">Send</button>
+    </div>
+  </div>
+  <div id="pipeline-panel">
+    <h3>Pipeline Inspector</h3>
+    <div id="plan-section" class="hidden"><div class="section-title">Subtask Plan</div><table id="plan-table"></table></div>
+    <div id="schedule-section" class="hidden"><div class="section-title">Execution Schedule</div><table id="schedule-table"></table></div>
+    <div id="pipeline-log"></div>
+  </div>
+</div>
+<script>
+let busy = false;
+const msgs = document.getElementById('messages');
+const log = document.getElementById('pipeline-log');
+const planTable = document.getElementById('plan-table');
+const scheduleTable = document.getElementById('schedule-table');
+const planSection = document.getElementById('plan-section');
+const scheduleSection = document.getElementById('schedule-section');
+const statusEl = document.getElementById('status');
+const input = document.getElementById('prompt-input');
+const btn = document.getElementById('send-btn');
+
+function setStatus(text) { statusEl.textContent = text; }
+
+function addMsg(role, text) {
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `<div class="bubble">${esc(text)}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function logLine(text, cls = '') {
+  const div = document.createElement('div');
+  div.className = `log-entry ${cls}`;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function showPlan(plan) {
+  planSection.classList.remove('hidden');
+  let html = '';
+  for (const s of plan) {
+    html += `<tr><td style="color:var(--accent)">${esc(s.id)}</td><td style="color:var(--yellow)">${esc(s.domain)}</td><td>${esc(s.prompt.slice(0, 50))}</td></tr>`;
+  }
+  planTable.innerHTML = html;
+}
+
+function showSchedule(schedule) {
+  scheduleSection.classList.remove('hidden');
+  let html = '';
+  for (const b of schedule) {
+    html += `<tr><td style="color:var(--accent)">${esc(b.model)}</td><td>${b.subtask_ids.join(', ')}</td></tr>`;
+  }
+  scheduleTable.innerHTML = html;
+}
+
+async function send() {
+  const prompt = input.value.trim();
+  if (!prompt || busy) return;
+  input.value = '';
+  busy = true; btn.disabled = true;
+
+  addMsg('user', prompt);
+  log.innerHTML = '';
+  planSection.classList.add('hidden');
+  scheduleSection.classList.add('hidden');
+  logLine('────────────────');
+  logLine(`Prompt: ${prompt}`, 'status');
+  setStatus('Starting...');
+
+  try {
+    const resp = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let currentEvent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+
+      const parts = buf.split('\n');
+      buf = parts.pop() || '';
+
+      for (const line of parts) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('event: ')) {
+          currentEvent = trimmed.slice(7);
+        } else if (trimmed.startsWith('data: ')) {
+          const data = trimmed.slice(6);
+          handleEvent(currentEvent, data);
+        }
+      }
+    }
+  } catch (err) {
+    addMsg('assistant', `Connection error: ${err.message}`);
+    setStatus('Error');
+    logLine(`Connection error: ${err.message}`, 'err');
+  } finally {
+    busy = false; btn.disabled = false;
+  }
+}
+
+function handleEvent(event, data) {
+  switch (event) {
+    case 'status':
+      setStatus(data);
+      logLine(data, 'status');
+      break;
+    case 'plan': {
+      const plan = JSON.parse(data);
+      showPlan(plan);
+      logLine(`Plan: ${plan.length} subtask(s)`, 'plan');
+      break;
+    }
+    case 'schedule': {
+      const sched = JSON.parse(data);
+      showSchedule(sched);
+      logLine(`Schedule: ${sched.length} batch(es)`, 'plan');
+      break;
+    }
+    case 'subtask_complete': {
+      const info = JSON.parse(data);
+      logLine(`${info.id} on ${info.model}: ${info.status} (${info.completed}/${info.total})`,
+              info.status === 'error' ? 'err' : 'ok');
+      break;
+    }
+    case 'result': {
+      const result = JSON.parse(data);
+      addMsg('assistant', result.synthesis);
+      setStatus('Done');
+      logLine('Response complete', 'ok');
+      break;
+    }
+    case 'error':
+      addMsg('assistant', `Error: ${data}`);
+      setStatus('Error');
+      logLine(`Error: ${data}`, 'err');
+      break;
+  }
+}
+
+input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+</script>
+</body>
+</html>
