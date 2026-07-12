@@ -397,6 +397,78 @@ A configurable synthesizer model receives the original prompt and all subtask ou
 
 ---
 
+## How Benchmarking Works
+
+The benchmark system measures how well each model performs across 9 domains. It is the foundation of PolyMind's model routing — the scores it produces determine which model gets assigned to each subtask type.
+
+### When you run `polymind benchmark`:
+
+```
+for each model:
+  for each domain (code, math, qa, reasoning, creative, research, summarization, translation, general):
+    for each of the 5 built-in tasks in that domain:
+      1. Send the task prompt to the model via LiteLLM
+      2. Score the output against the expected answer
+      3. Record score, latency, and token usage
+    After all 5 tasks: save the average score as a RankEntry
+Save all RankEntries to ~/.polymind/ranks.yaml
+```
+
+### Test Tasks
+
+Each domain has 5 hand-crafted tasks (45 total). Examples:
+
+| Domain | Example Prompt | Expected Contains |
+|--------|---------------|-------------------|
+| code | "Write a Python function to check if a number is prime" | `def is_prime(n):` |
+| math | "What is 25 × 4 + 10?" | `110` |
+| qa | "What is the capital of France?" | `Paris` |
+| reasoning | "A bat and a ball cost $1.10..." | `0.05` |
+| creative | "Write a two-line poem about the moon" | `poem about moon` |
+| research | "Summarize JWST's first year findings" | `JWST first year findings` |
+| summarization | "Summarize: The Internet is a global network..." | `global computer network evolution` |
+| translation | "Translate to French: Hello, how are you?" | `Bonjour` |
+| general | "What are three benefits of regular exercise?" | `benefits of exercise` |
+
+### Scoring
+
+Two scoring methods are used depending on the domain:
+
+**Exact-match** (`code`, `math`, `qa`): the expected string must appear in the model's output (case-insensitive). Score is 1.0 or 0.0.
+
+**LLM-as-judge** (all other domains): a separate judge model (default `ollama/llama3.2:1b`) is asked to rate the output on a 0.0–1.0 scale. The judge is prompted with the original task, the expected answer, and the model's output, and responds with a single float.
+
+### Aggregation
+
+For each (model, domain) pair, the 5 individual task scores are averaged into a single `RankEntry`:
+
+```
+RankEntry(model="ollama/llama3.2:1b", domain=DomainType.code, score=0.85, latency_ms=3420, cost=0.0)
+```
+
+These entries are saved to `~/.polymind/ranks.yaml` and later used by the scheduler to route tasks to the best model for each domain.
+
+### Per-Task Detail (`--report`)
+
+Pass `--report` / `-r` to see a full per-task breakdown:
+
+```
+ Model           Domain      Task                                                          Expected       Score   Latency   Status
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ollama/llama3.2:1b  code     Write a Python function to check if a number is prime        def is_prime(n):   1.00    2340ms   OK
+ ollama/llama3.2:1b  math     What is 25 × 4 + 10?                                         110               0.00    1230ms   OK
+ ...
+ Summary: 7/10 passed (3 failed)  |  Avg score: 0.63  |  Avg latency: 1840ms
+```
+
+### Progress Display
+
+- **CLI**: Rich progress bar with model/domain/task labels
+- **TUI**: `ProgressBar` widget + status text + live log
+- **Web**: Real-time SSE progress events drive a CSS progress bar in the browser
+
+---
+
 ## Features
 
 ### Core (MVP)
