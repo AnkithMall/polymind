@@ -5,7 +5,6 @@
 [![CI](https://github.com/AnkithMall/polymind/actions/workflows/ci.yml/badge.svg)](https://github.com/AnkithMall/polymind/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Python 3.14](https://img.shields.io/badge/python-3.14-green.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ---
