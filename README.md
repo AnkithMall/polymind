@@ -5,6 +5,7 @@
 [![CI](https://github.com/AnkithMall/polymind/actions/workflows/ci.yml/badge.svg)](https://github.com/AnkithMall/polymind/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-green.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ---
@@ -474,6 +475,18 @@ Commands:
 | `polymind config auto-detect` | Auto-detect local providers and update config |
 
 ---
+
+## Environment Requirements
+
+| Requirement | Version |
+|-------------|---------|
+| **Python** | **3.11+** (developed and tested on 3.14) |
+| **OS** | Linux (Ubuntu 24.04+ recommended), macOS, WSL2 |
+| **Architecture** | x86_64 (ARM64 untested) |
+| **VRAM** | 8 GB+ recommended for running local models |
+| **RAM** | 16 GB+ recommended |
+
+The project pins no maximum Python version — it is forward-compatible with 3.14 and later.
 
 ## Installation
 
