@@ -30,6 +30,15 @@
   header h1 { font-size: 18px; color: var(--accent); }
   header span { color: var(--text-dim); font-size: 13px; }
   #status { margin-left: auto; font-size: 13px; color: var(--text-dim); }
+
+  .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .tab { padding: 10px 20px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { display: none; flex: 1; overflow: hidden; }
+  .tab-content.active { display: flex; flex-direction: column; }
+
   #layout { display: flex; flex: 1; overflow: hidden; }
   #chat-panel { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
   #pipeline-panel {
@@ -76,6 +85,29 @@
   table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 12px; padding: 0 16px; }
   td { padding: 3px 8px; border-bottom: 1px solid var(--border); }
   .hidden { display: none; }
+
+  #config-panel { padding: 20px; overflow-y: auto; flex: 1; }
+  #config-panel h2 { color: var(--accent); margin-bottom: 16px; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
+  .form-group input, .form-group select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 4px; font-size: 13px; outline: none;
+  }
+  .form-group input:focus { border-color: var(--accent); }
+  .model-row { display: flex; gap: 8px; align-items: center; padding: 8px; background: var(--surface2); margin-bottom: 4px; border-radius: 4px; }
+  .model-row span { flex: 1; font-size: 13px; }
+  .model-row .del { color: var(--red); cursor: pointer; font-size: 16px; }
+  .btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 12px; }
+  .btn-primary { background: var(--accent); color: var(--bg); }
+  .btn-primary:hover { opacity: .9; }
+  .btn-danger { background: var(--red); color: #fff; }
+
+  .benchmark-progress { background: var(--surface2); border-radius: 4px; height: 20px; margin: 12px 0; overflow: hidden; }
+  .benchmark-progress-bar { height: 100%; background: var(--accent); transition: width .3s; width: 0%; }
+  #benchmark-panel { padding: 20px; overflow-y: auto; flex: 1; }
+  #benchmark-panel h2 { color: var(--accent); margin-bottom: 16px; }
+  #benchmark-log { max-height: 300px; overflow-y: auto; background: var(--surface2); padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -84,21 +116,118 @@
   <span>Multi-Specialist LLM Orchestrator</span>
   <div id="status">Ready</div>
 </header>
-<div id="layout">
-  <div id="chat-panel">
-    <div id="messages"></div>
-    <div id="input-area">
-      <input id="prompt-input" type="text" placeholder="Type a message..." autofocus>
-      <button id="send-btn" onclick="send()">Send</button>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('chat')">Chat</div>
+  <div class="tab" onclick="switchTab('config')">Config</div>
+  <div class="tab" onclick="switchTab('benchmark')">Benchmark</div>
+</div>
+
+<div id="chat-tab" class="tab-content active">
+  <div id="layout">
+    <div id="chat-panel">
+      <div id="messages"></div>
+      <div id="input-area">
+        <input id="prompt-input" type="text" placeholder="Type a message..." autofocus>
+        <button id="send-btn" onclick="send()">Send</button>
+      </div>
+    </div>
+    <div id="pipeline-panel">
+      <h3>Pipeline Inspector</h3>
+      <div id="plan-section" class="hidden"><div class="section-title">Subtask Plan</div><table id="plan-table"></table></div>
+      <div id="schedule-section" class="hidden"><div class="section-title">Execution Schedule</div><table id="schedule-table"></table></div>
+      <div id="pipeline-log"></div>
     </div>
   </div>
-  <div id="pipeline-panel">
-    <h3>Pipeline Inspector</h3>
-    <div id="plan-section" class="hidden"><div class="section-title">Subtask Plan</div><table id="plan-table"></table></div>
-    <div id="schedule-section" class="hidden"><div class="section-title">Execution Schedule</div><table id="schedule-table"></table></div>
-    <div id="pipeline-log"></div>
+</div>
+
+<div id="config-tab" class="tab-content">
+  <div id="config-panel">
+    <h2>Configuration</h2>
+    <div class="form-group">
+      <label>Router Model</label>
+      <input id="cfg-router" type="text" placeholder="ollama/llama3.2:1b">
+    </div>
+    <div class="form-group">
+      <label>Synthesizer Model (leave blank to use router)</label>
+      <input id="cfg-synthesizer" type="text" placeholder="">
+    </div>
+    <div class="form-group">
+      <label>Judge Model</label>
+      <input id="cfg-judge" type="text" placeholder="ollama/llama3.2:1b">
+    </div>
+    <div class="form-group">
+      <label>Strategy</label>
+      <select id="cfg-strategy">
+        <option value="model_aware">Model Aware</option>
+        <option value="sequential">Sequential</option>
+        <option value="parallel">Parallel</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Ranking Mode</label>
+      <select id="cfg-ranking">
+        <option value="accuracy">Accuracy</option>
+        <option value="cost">Cost</option>
+        <option value="cost_effective">Cost Effective</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Model Source</label>
+      <select id="cfg-source">
+        <option value="all">All</option>
+        <option value="local">Local</option>
+        <option value="online">Online</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="cfg-verbose" onchange="onVerboseToggle()">
+        Verbose Mode (show detailed debug logs)
+      </label>
+    </div>
+    <h3 style="color:var(--accent);margin:16px 0 8px">Models</h3>
+    <div id="model-list"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <select id="new-provider" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px">
+        <option value="ollama">Ollama</option>
+        <option value="lm_studio">LM Studio</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="openrouter">OpenRouter</option>
+      </select>
+      <input id="new-model" type="text" placeholder="Model name" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-size:12px;outline:none">
+      <button class="btn btn-primary" onclick="addModel()">Add</button>
+      <button class="btn btn-primary" onclick="detectModels()">Auto-Detect</button>
+    </div>
+    <div style="margin-top:16px">
+      <button class="btn btn-primary" onclick="saveConfig()">Save Config</button>
+    </div>
   </div>
 </div>
+
+<div id="benchmark-tab" class="tab-content">
+  <div id="benchmark-panel">
+    <h2>Benchmark</h2>
+    <div class="form-group">
+      <label>Models (comma-separated, e.g. ollama/llama3.2:1b)</label>
+      <input id="bench-models" type="text" placeholder="">
+    </div>
+    <div class="form-group">
+      <label>Domains (comma-separated, leave empty for all)</label>
+      <input id="bench-domains" type="text" placeholder="code, math, qa">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="startBenchmark()">Run Benchmark</button>
+      <button class="btn btn-primary" onclick="autoDetectBenchmark()">Auto-Detect & Benchmark</button>
+    </div>
+    <div class="benchmark-progress"><div id="bench-progress-bar" class="benchmark-progress-bar"></div></div>
+    <div id="bench-status" style="font-size:13px;color:var(--text-dim);margin:4px 0"></div>
+    <div id="benchmark-log"></div>
+    <div id="bench-results" style="margin-top:12px"></div>
+  </div>
+</div>
+
 <script>
 let busy = false;
 const msgs = document.getElementById('messages');
@@ -112,6 +241,14 @@ const input = document.getElementById('prompt-input');
 const btn = document.getElementById('send-btn');
 
 function setStatus(text) { statusEl.textContent = text; }
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById(name + '-tab').classList.add('active');
+  document.querySelector(`.tab[onclick="switchTab('${name}')"]`).classList.add('active');
+  if (name === 'config') loadConfig();
+}
 
 function addMsg(role, text) {
   const div = document.createElement('div');
@@ -242,6 +379,189 @@ function handleEvent(event, data) {
 }
 
 input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+/* ─── Config ─── */
+
+async function loadConfig() {
+  const resp = await fetch('/api/config');
+  const cfg = await resp.json();
+
+  document.getElementById('cfg-router').value = cfg.router_model || '';
+  document.getElementById('cfg-synthesizer').value = cfg.synthesizer_model || '';
+  document.getElementById('cfg-judge').value = cfg.judge_model || '';
+  document.getElementById('cfg-strategy').value = cfg.strategy || 'model_aware';
+  document.getElementById('cfg-ranking').value = cfg.ranking_mode || 'accuracy';
+  document.getElementById('cfg-source').value = cfg.model_source || 'all';
+  document.getElementById('cfg-verbose').checked = !!cfg.verbose;
+
+  const list = document.getElementById('model-list');
+  list.innerHTML = '';
+  for (const m of cfg.models) {
+    const row = document.createElement('div');
+    row.className = 'model-row';
+    row.innerHTML = `<span>${esc(m.provider)}/${esc(m.name)}</span><span class="del" onclick="removeModel(this)">&times;</span>`;
+    row.dataset.provider = m.provider;
+    row.dataset.name = m.name;
+    list.appendChild(row);
+  }
+}
+
+function removeModel(el) {
+  el.parentElement.remove();
+}
+
+async function addModel() {
+  const provider = document.getElementById('new-provider').value;
+  const name = document.getElementById('new-model').value.trim();
+  if (!name) return;
+
+  const list = document.getElementById('model-list');
+  const row = document.createElement('div');
+  row.className = 'model-row';
+  row.innerHTML = `<span>${esc(provider)}/${esc(name)}</span><span class="del" onclick="removeModel(this)">&times;</span>`;
+  row.dataset.provider = provider;
+  row.dataset.name = name;
+  list.appendChild(row);
+  document.getElementById('new-model').value = '';
+}
+
+async function detectModels() {
+  const resp = await fetch('/api/providers/detect');
+  const data = await resp.json();
+  const list = document.getElementById('model-list');
+  for (const m of data.providers) {
+    const existing = Array.from(list.children).some(
+      r => r.dataset.provider === m.provider && r.dataset.name === m.name
+    );
+    if (!existing) {
+      const row = document.createElement('div');
+      row.className = 'model-row';
+      row.innerHTML = `<span style="color:var(--green)">${esc(m.provider)}/${esc(m.name)}</span><span class="del" onclick="removeModel(this)">&times;</span>`;
+      row.dataset.provider = m.provider;
+      row.dataset.name = m.name;
+      list.appendChild(row);
+    }
+  }
+}
+
+async function saveConfig() {
+  const models = Array.from(document.getElementById('model-list').children).map(r => ({
+    provider: r.dataset.provider,
+    name: r.dataset.name,
+  }));
+
+  const body = {
+    models,
+    router_model: document.getElementById('cfg-router').value || null,
+    synthesizer_model: document.getElementById('cfg-synthesizer').value || null,
+    judge_model: document.getElementById('cfg-judge').value || null,
+    strategy: document.getElementById('cfg-strategy').value,
+    ranking_mode: document.getElementById('cfg-ranking').value,
+    model_source: document.getElementById('cfg-source').value,
+    verbose: document.getElementById('cfg-verbose').checked,
+  };
+
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  setStatus('Config saved');
+}
+
+function onVerboseToggle() {
+  const on = document.getElementById('cfg-verbose').checked;
+  setStatus(on ? 'Verbose mode enabled (save config to apply)' : 'Verbose mode disabled');
+}
+
+/* ─── Benchmark ─── */
+
+async function startBenchmark() {
+  const modelsRaw = document.getElementById('bench-models').value.trim();
+  const domainsRaw = document.getElementById('bench-domains').value.trim();
+  const models = modelsRaw ? modelsRaw.split(',').map(s => s.trim()) : [];
+  const domains = domainsRaw ? domainsRaw.split(',').map(s => s.trim()) : [];
+
+  if (!models.length && !domainsRaw) {
+    const resp = await fetch('/api/config');
+    const cfg = await resp.json();
+    for (const m of cfg.models) models.push(`${m.provider}/${m.name}`);
+  }
+
+  if (!models.length) { alert('No models specified'); return; }
+
+  const bar = document.getElementById('bench-progress-bar');
+  const status = document.getElementById('bench-status');
+  const logDiv = document.getElementById('benchmark-log');
+  const resultsDiv = document.getElementById('bench-results');
+  bar.style.width = '0%';
+  logDiv.innerHTML = '';
+  resultsDiv.innerHTML = '';
+  setStatus('Benchmarking...');
+
+  try {
+    const resp = await fetch('/api/benchmark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ models, domains }),
+    });
+
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let currentEvent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+
+      const parts = buf.split('\n');
+      buf = parts.pop() || '';
+
+      for (const line of parts) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('event: ')) currentEvent = trimmed.slice(7);
+        else if (trimmed.startsWith('data: ')) {
+          const data = trimmed.slice(6);
+          if (currentEvent === 'progress') {
+            const p = JSON.parse(data);
+            bar.style.width = p.pct + '%';
+            status.textContent = p.msg;
+          } else if (currentEvent === 'result') {
+            const entries = JSON.parse(data);
+            let html = '<h3 style="color:var(--accent);margin:8px 0">Results</h3><table>';
+            html += '<tr><th>Model</th><th>Domain</th><th>Score</th><th>Latency</th></tr>';
+            for (const e of entries) {
+              html += `<tr><td>${esc(e.model)}</td><td>${esc(e.domain)}</td><td>${e.score.toFixed(3)}</td><td>${e.latency_ms}ms</td></tr>`;
+            }
+            html += '</table>';
+            resultsDiv.innerHTML = html;
+            bar.style.width = '100%';
+            setStatus('Benchmark complete');
+          } else if (currentEvent === 'error') {
+            logDiv.innerHTML += `<div style="color:var(--red)">Error: ${esc(data)}</div>`;
+            setStatus('Error');
+          }
+        }
+      }
+    }
+  } catch (err) {
+    logDiv.innerHTML += `<div style="color:var(--red)">Connection error: ${err.message}</div>`;
+    setStatus('Error');
+  }
+}
+
+async function autoDetectBenchmark() {
+  const resp = await fetch('/api/providers/detect');
+  const data = await resp.json();
+  const models = data.providers.map(m => `${m.provider}/${m.name}`);
+  if (!models.length) { alert('No local models detected'); return; }
+  document.getElementById('bench-models').value = models.join(', ');
+  document.getElementById('bench-domains').value = '';
+  startBenchmark();
+}
 </script>
 </body>
 </html>

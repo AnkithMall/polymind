@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -10,6 +11,8 @@ from pydantic import BaseModel, Field
 
 from polymind.core.types import ExecutionStrategy, ModelSource, RankingMode
 
+logger = logging.getLogger(__name__)
+
 
 ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
@@ -19,7 +22,10 @@ def resolve_env_vars(value: Any) -> Any:
 
         def _replace(m: re.Match) -> str:
             var = m.group(1)
-            return os.environ.get(var, "")
+            resolved = os.environ.get(var, "")
+            if resolved:
+                logger.debug("Resolved env var ${%s}", var)
+            return resolved
 
         return ENV_VAR_PATTERN.sub(_replace, value)
     if isinstance(value, dict):
@@ -108,20 +114,27 @@ class Config(BaseModel):
     @classmethod
     def from_yaml(cls, path: str | Path) -> "Config":
         path = Path(path).expanduser()
+        logger.debug("Loading config from %s", path)
         if not path.exists():
+            logger.debug("Config file %s not found, returning defaults", path)
             return cls()
 
         with open(path) as f:
             raw = yaml.safe_load(f)
 
         if raw is None:
+            logger.debug("Config file %s is empty, returning defaults", path)
             return cls()
 
         resolved = resolve_env_vars(raw)
-        return cls.model_validate(resolved)
+        logger.debug("Environment variables resolved in config")
+        config = cls.model_validate(resolved)
+        logger.debug("Config loaded: %d models defined", len(config.models))
+        return config
 
     def to_yaml(self, path: str | Path) -> None:
         path = Path(path).expanduser()
+        logger.debug("Saving config to %s", path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             yaml.dump(
@@ -130,6 +143,7 @@ class Config(BaseModel):
                 default_flow_style=False,
                 sort_keys=False,
             )
+        logger.debug("Config saved to %s", path)
 
     @classmethod
     def default_yaml(cls) -> str:

@@ -50,17 +50,29 @@ async def synthesize(
     **litellm_kwargs: Any,
 ) -> PipelineResult:
     messages = _build_synthesis_messages(result.original_prompt, result.subtask_results)
+    prompt_len = sum(len(m["content"]) for m in messages)
+    logger.debug(
+        "Synthesis using model=%s, prompt length=%d chars",
+        synthesizer_model,
+        prompt_len,
+    )
 
+    import time
+    t0 = time.monotonic()
     try:
+        logger.debug("Synthesis LLM call starting")
         response = await litellm.acompletion(
             model=synthesizer_model,
             messages=messages,
             **litellm_kwargs,
         )
         content: str = response.choices[0].message.content or ""
+        elapsed = time.monotonic() - t0
+        logger.debug("Synthesis LLM call completed in %.2fs", elapsed)
         result.synthesis = content
     except Exception as e:
-        logger.error("Synthesis failed: %s", e)
+        elapsed = time.monotonic() - t0
+        logger.error("Synthesis failed after %.2fs: %s", elapsed, e)
         result.synthesis = None
 
     return result

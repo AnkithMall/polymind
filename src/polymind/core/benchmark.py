@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -370,13 +371,16 @@ async def llm_judge_score(
         response = await litellm.acompletion(
             model=judge_model,
             messages=[{"role": "user", "content": scoring_prompt}],
-            max_tokens=10,
+            max_tokens=50,
             temperature=0.0,
             **litellm_kwargs,
         )
         content: str = response.choices[0].message.content or "0.0"
-        content = content.strip()
-        score = float(content)
+        match = re.search(r"(\d+\.?\d*)", content)
+        if match:
+            score = float(match.group(1))
+        else:
+            score = 0.0
         return max(0.0, min(1.0, score))
     except Exception as e:
         logger.warning("LLM judge failed, returning 0.0: %s", e)
@@ -415,11 +419,23 @@ async def run_benchmark(
 
     entries: list[RankEntry] = []
 
+    total_tasks = len(models) * sum(
+        len(get_tasks_for_domain(d)) for d in domains
+    )
+    completed = 0
+
     for model in models:
+        logger.debug("Benchmark: starting model %s", model)
         for domain in domains:
             tasks = get_tasks_for_domain(domain)
             if not tasks:
+                logger.debug("Benchmark: no tasks for domain %s, skipping", domain)
                 continue
+
+            logger.debug(
+                "Benchmark: model=%s domain=%s tasks=%d",
+                model, domain.value, len(tasks),
+            )
 
             domain_scores: list[float] = []
             total_latency = 0.0
@@ -427,15 +443,16 @@ async def run_benchmark(
             errors = 0
 
             for task_idx, task in enumerate(tasks):
-                total = (
-                    len(models)
-                    * len(domains)
-                    * sum(len(get_tasks_for_domain(d)) for d in domains)
-                )
                 if progress_callback:
                     progress_callback(
-                        f"{model} / {domain.value} / task {task_idx + 1}/{len(tasks)}"
+                        completed / max(total_tasks, 1),
+                        f"{model} / {domain.value} / task {task_idx + 1}/{len(tasks)}",
                     )
+
+                logger.debug(
+                    "Benchmark task %d/%d: model=%s domain=%s",
+                    task_idx + 1, len(tasks), model, domain.value,
+                )
 
                 try:
                     start = time.monotonic()
@@ -459,6 +476,10 @@ async def run_benchmark(
                     elapsed = (time.monotonic() - start) * 1000
 
                     score = await score_task(output, task, task.prompt, judge_model)
+                    logger.debug(
+                        "Benchmark result: model=%s domain=%s score=%.4f latency=%.0fms",
+                        model, domain.value, score, elapsed,
+                    )
                     domain_scores.append(score)
                     total_latency += elapsed
                     if in_tokens is not None and out_tokens is not None:
@@ -471,10 +492,16 @@ async def run_benchmark(
                     domain_scores.append(0.0)
                     errors += 1
 
+                completed += 1
+
             if domain_scores:
                 avg_score = sum(domain_scores) / len(domain_scores)
                 avg_latency = total_latency / len(domain_scores)
                 avg_cost = total_cost / len(domain_scores) if total_cost > 0 else 0.0
+                logger.debug(
+                    "Benchmark domain done: model=%s domain=%s avg_score=%.4f avg_latency=%.0fms errors=%d",
+                    model, domain.value, avg_score, avg_latency, errors,
+                )
                 entries.append(
                     RankEntry(
                         model=model,
@@ -491,12 +518,16 @@ async def run_benchmark(
 def load_ranks(path: str | Path) -> RankStore:
     path = Path(path).expanduser()
     if not path.exists():
+        logger.debug("Ranks file not found at %s, returning empty store", path)
         return RankStore()
     with open(path) as f:
         data = yaml.safe_load(f)
     if not data or "entries" not in data:
+        logger.debug("Ranks file %s has no entries, returning empty store", path)
         return RankStore()
-    return RankStore.model_validate(data)
+    store = RankStore.model_validate(data)
+    logger.debug("Loaded %d rank entries from %s", len(store.entries), path)
+    return store
 
 
 def save_ranks(store: RankStore, path: str | Path) -> None:
@@ -505,3 +536,4 @@ def save_ranks(store: RankStore, path: str | Path) -> None:
     data = store.model_dump(mode="json")
     with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    logger.debug("Saved %d rank entries to %s", len(store.entries), path)

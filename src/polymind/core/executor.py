@@ -33,6 +33,10 @@ async def execute_subtask(
 
     async def _call() -> tuple[str, int | None, int | None]:
         start = time.monotonic()
+        logger.debug(
+            "Calling model %s for subtask %s (domain=%s)",
+            model, subtask.id, subtask.domain.value,
+        )
         response = await litellm.acompletion(
             model=model,
             messages=[{"role": "user", "content": subtask.prompt}],
@@ -43,11 +47,18 @@ async def execute_subtask(
         usage = getattr(response, "usage", None)
         in_tokens = usage.prompt_tokens if usage else None
         out_tokens = usage.completion_tokens if usage else None
+        logger.debug(
+            "Response from %s for subtask %s: tokens=%d/%d latency=%.1fs",
+            model, subtask.id, in_tokens or 0, out_tokens or 0, elapsed,
+        )
         return content, in_tokens, out_tokens
 
     try:
         output, in_tokens, out_tokens = await retry_with_backoff(
             _call, max_retries=max_retries, base_delay_s=1.0
+        )
+        logger.debug(
+            "Subtask %s completed successfully on %s", subtask.id, model,
         )
     except Exception as e:
         logger.error(

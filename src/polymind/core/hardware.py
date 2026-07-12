@@ -142,8 +142,79 @@ def _get_ollama_models() -> list[str]:
         return []
 
 
+def get_all_ollama_models() -> list[str]:
+    """Return all installed Ollama models via `ollama list`."""
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return []
+        lines = result.stdout.strip().split("\n")[1:]
+        return [line.split()[0] for line in lines if line.strip()]
+    except Exception:
+        return []
+
+
+def detect_lm_studio_models(base_url: str = "http://localhost:1234/v1") -> list[str]:
+    """Return models available from a running LM Studio instance."""
+    try:
+        import urllib.request
+        import json
+
+        req = urllib.request.Request(f"{base_url}/models", method="GET")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+        return [m["id"] for m in data.get("data", [])]
+    except Exception:
+        return []
+
+
+def detect_ollama_models() -> list[dict]:
+    """Return detected Ollama models as config-ready dicts."""
+    return [{"name": m, "provider": "ollama"} for m in get_all_ollama_models()]
+
+
+def detect_lm_studio() -> list[dict]:
+    """Return detected LM Studio models as config-ready dicts."""
+    models = detect_lm_studio_models()
+    return [{"name": m, "provider": "lm_studio"} for m in models]
+
+
+def detect_local_providers() -> list[dict]:
+    """Auto-detect all available local providers and return their model configs."""
+    detected: list[dict] = []
+    if shutil.which("ollama"):
+        detected.extend(detect_ollama_models())
+        logger.debug("Ollama detected, %d models found", len(detected))
+    lm_studio_detected = shutil.which("lm_studio") or _check_url("http://localhost:1234/v1/models")
+    logger.debug("LM Studio detected: %s", lm_studio_detected)
+    if lm_studio_detected:
+        detected.extend(detect_lm_studio())
+    return detected
+
+
+def _check_url(url: str, timeout: int = 2) -> bool:
+    try:
+        import urllib.request
+
+        req = urllib.request.Request(url, method="HEAD")
+        urllib.request.urlopen(req, timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
 def scan_hardware() -> HardwareInfo:
+    logger.debug("Starting hardware scan")
     total_ram, available_ram = _get_ram_info()
+    logger.debug("RAM detected: %.1f GB total, %.1f GB available", total_ram, available_ram)
+
     vram = _get_nvidia_vram()
     has_nvidia = vram > 0
     has_metal = False
@@ -153,9 +224,15 @@ def scan_hardware() -> HardwareInfo:
         if metal_vram > 0:
             vram = metal_vram
             has_metal = True
+            logger.debug("Metal VRAM detected: %.1f GB", vram)
+    else:
+        logger.debug("NVIDIA VRAM detected: %.1f GB", vram)
 
     cores = _get_cpu_cores()
+    logger.debug("CPU cores detected: %d", cores)
+
     models = _get_ollama_models()
+    logger.debug("Ollama loaded models count: %d", len(models))
 
     return HardwareInfo(
         total_ram_gb=round(total_ram, 1),
