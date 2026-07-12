@@ -63,20 +63,13 @@ PolyMind solves all of these problems with a data-driven, hardware-aware approac
 
 ```mermaid
 flowchart TB
-    Prompt[User Prompt] --> Analyzer[Analyzer LLM]
+    User[User] --> FE[Frontend<br/>CLI / TUI / Web]
+    FE --> Analyzer[Analyzer LLM]
     Analyzer --> Scheduler[Scheduler<br/>DAG + Batching]
-    Scheduler --> Executor[Executor<br/>Subtask Runner]
     RankStore[(Rank Store<br/>ranks.yaml)] -.-> Scheduler
+    Scheduler --> Executor[Executor<br/>Subtask Runner]
     Executor --> Synthesizer[Synthesizer LLM]
     Synthesizer --> Response[Final Response]
-
-    subgraph Frontends
-        CLI[CLI · Typer]
-        TUI[TUI · Textual]
-        Web[Web UI · FastAPI]
-    end
-
-    Prompt --> Frontends
 ```
 
 ---
@@ -92,11 +85,11 @@ flowchart LR
     E --> Syn[Synthesize]
     Syn --> R[Response]
 
-    A -.-> |Subtask Plan JSON + Domains| A2[ ]
-    RL -.-> |Best Model per Domain<br/>from ranks.yaml| RL2[ ]
-    S -.-> |Batch Tasks by Model<br/>to Minimize VRAM Swaps| S2[ ]
-    E -.-> |Run Subtasks<br/>with Retry + Fallback| E2[ ]
-    Syn -.-> |Merge Outputs<br/>via Synthesizer LLM| Syn2[ ]
+    A -.-> note1[Breaks prompt into typed subtasks]
+    RL -.-> note2[Picks best model per domain from ranks.yaml]
+    S -.-> note3[Groups tasks by model to minimize VRAM swaps]
+    E -.-> note4[Runs subtasks with retry and fallback]
+    Syn -.-> note5[Merges all outputs via Synthesizer LLM]
 ```
 
 ### Smart Scheduler Algorithm
@@ -104,28 +97,23 @@ flowchart LR
 The scheduler is PolyMind's most distinctive feature. Loading a model into VRAM typically takes 5–30 seconds. Naive execution causes repeated load/unload cycles.
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph Input[Input: 6 tasks, 3 models]
         direction TB
         I1[T1 code] --> I2[T2 math]
-        I3[T3 reasoning] --> I4[T5 code]
-        I5[T4 code]
+        I3[T3 reasoning] --> I5[T5 code]
+        I4[T4 code]
         I6[T6 math]
     end
 
-    subgraph Naive[Naive: 8 model loads]
-        N1[Load A] --> N2[T1] --> N3[Unload A]
-        N3 --> N4[Load B] --> N5[T2] --> N6[Unload B]
-        N6 --> N7[Load C] --> N8[T3] --> N9[Unload C]
-        N9 --> N10[Load A] --> N11[T4]
-        N11 --> N12[T5] --> N13[Unload A]
-        N13 --> N14[Load B] --> N15[T6]
+    subgraph Naive[Naive — 8 loads]
+        direction LR
+        N1[Load A] --> N2[Run T1] --> N3[→ B] --> N4[Run T2] --> N5[→ C] --> N6[Run T3] --> N7[→ A] --> N8[Run T4, T5] --> N9[→ B] --> N10[Run T6]
     end
 
-    subgraph Smart[Smart model-aware: 4 model loads]
-        S1[Load A] --> S2[T1] --> S3[T4] --> S4[T5] --> S5[Unload A]
-        S5 --> S6[Load B] --> S7[T2] --> S8[T6] --> S9[Unload B]
-        S9 --> S10[Load C] --> S11[T3]
+    subgraph Smart[Smart — 4 loads]
+        direction LR
+        S1[Load A] --> S2[Run T1, T4, T5] --> S3[→ B] --> S4[Run T2, T6] --> S5[→ C] --> S6[Run T3]
     end
 ```
 
@@ -867,11 +855,15 @@ BUILTIN_TASKS[DomainType("medical")] = [
 
 MIT License — see [LICENSE](LICENSE).
 
+PolyMind is free and open-source software. You are welcome to use, modify, and distribute it for personal, educational, or commercial purposes under the terms of the MIT license.
+
+Contributions are encouraged — feel free to open issues, submit pull requests, or fork the repository.
+
 ---
 
 ## Repository
 
-- **Branch**: `polymind-v2` (separate from `main`)
+- **Branch**: `main` (default)
 - **Remote**: `git@github.com:AnkithMall/polymind.git`
-- **Clone**: `git clone -b polymind-v2 git@github.com:AnkithMall/polymind.git`
+- **Clone**: `git clone git@github.com:AnkithMall/polymind.git`
 
