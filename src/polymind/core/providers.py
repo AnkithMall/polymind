@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from polymind.core.types import ModelSource
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderType(str, Enum):
@@ -42,17 +45,26 @@ class ProviderInfo:
 
     @property
     def litellm_string(self) -> str:
+        result: str
         if self.provider == ProviderType.ollama:
-            return f"ollama/{self.model_name}"
-        if self.provider == ProviderType.lm_studio:
-            return f"openai/{self.model_name}"
-        if self.provider == ProviderType.openrouter:
-            return f"openrouter/{self.model_name}"
-        if self.provider == ProviderType.openai:
-            return f"openai/{self.model_name}"
-        if self.provider == ProviderType.anthropic:
-            return f"anthropic/{self.model_name}"
-        return self.model_name
+            result = f"ollama/{self.model_name}"
+        elif self.provider == ProviderType.lm_studio:
+            result = f"openai/{self.model_name}"
+        elif self.provider == ProviderType.openrouter:
+            result = f"openrouter/{self.model_name}"
+        elif self.provider == ProviderType.openai:
+            result = f"openai/{self.model_name}"
+        elif self.provider == ProviderType.anthropic:
+            result = f"anthropic/{self.model_name}"
+        else:
+            result = self.model_name
+        logger.debug(
+            "litellm_string for %s/%s -> %s",
+            self.provider.value,
+            self.model_name,
+            result,
+        )
+        return result
 
     def build_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
@@ -70,7 +82,18 @@ def resolve_model_string(model_ref: str, provider: str | None = None) -> Provide
             ptype = ProviderType(prov)
         except ValueError:
             ptype = ProviderType.ollama
+        logger.debug(
+            "Resolved model ref %s -> provider=%s, model=%s",
+            model_ref,
+            ptype.value,
+            name,
+        )
         return ProviderInfo(provider=ptype, model_name=name)
 
     ptype = ProviderType(provider) if provider else ProviderType.ollama
+    logger.debug(
+        "Resolved model ref %s -> provider=%s (from provider arg)",
+        model_ref,
+        ptype.value,
+    )
     return ProviderInfo(provider=ptype, model_name=model_ref)

@@ -16,7 +16,14 @@ from polymind.core.context import (
 )
 from polymind.core.executor import execute_subtask, execute_subtask_with_context
 from polymind.core.fallback import FallbackError, fallback_chain, retry_with_backoff
-from polymind.core.hardware import HardwareInfo, scan_hardware
+from polymind.core.logging_setup import setup_logging
+from polymind.core.hardware import (
+    HardwareInfo,
+    detect_local_providers,
+    detect_lm_studio_models,
+    get_all_ollama_models,
+    scan_hardware,
+)
 from polymind.core.providers import (
     ONLINE_PROVIDERS,
     LOCAL_PROVIDERS,
@@ -72,11 +79,14 @@ __all__ = [
     "analyze_prompt",
     "build_schedule",
     "count_model_loads",
+    "detect_local_providers",
+    "detect_lm_studio_models",
     "estimate_tokens",
     "execute_subtask",
     "execute_subtask_with_context",
     "fallback_chain",
     "get_model_context_limit",
+    "get_all_ollama_models",
     "get_tasks_for_domain",
     "load_ranks",
     "provider_model_source",
@@ -84,6 +94,7 @@ __all__ = [
     "retry_with_backoff",
     "run_benchmark",
     "save_ranks",
+    "setup_logging",
     "scan_hardware",
     "synthesize",
     "synthesize_streaming",

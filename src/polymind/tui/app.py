@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from textual.widgets import (
     ListView,
     RichLog,
     Static,
+    Select,
 )
 
 from polymind.core import (
@@ -28,17 +30,51 @@ from polymind.core import (
     DomainType,
     ExecutionSchedule,
     ExecutionStrategy,
+    ModelConfig,
     PipelineResult,
     SubtaskResult,
     analyze_prompt,
     build_schedule,
+    detect_local_providers,
     execute_subtask,
     load_ranks,
     resolve_model_string,
     run_benchmark,
     save_ranks,
+    setup_logging,
     synthesize,
 )
+from polymind.core.providers import ProviderType
+
+CONFIG_PATH = Path("~/.polymind/config.yaml").expanduser()
+
+
+class TuiLogHandler(logging.Handler):
+    """Captures log records and writes them to the pipeline RichLog."""
+
+    def __init__(self, pipeline_getter):
+        super().__init__()
+        self.pipeline_getter = pipeline_getter
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            pipeline = self.pipeline_getter()
+            if pipeline is None:
+                return
+            msg = self.format(record)
+            style = {
+                logging.DEBUG: "dim",
+                logging.INFO: "",
+                logging.WARNING: "yellow",
+                logging.ERROR: "red",
+                logging.CRITICAL: "red bold",
+            }.get(record.levelno, "")
+            if style:
+                pipeline.log_line(f"[{style}]{msg}[/]")
+            else:
+                pipeline.log_line(msg)
+        except Exception:
+            pass
 
 
 class ShortcutsScreen(ModalScreen):
@@ -229,6 +265,7 @@ class PolyMindApp(App):
         Binding("ctrl+m", "cycle_strategy", "Cycle Strategy"),
         Binding("ctrl+p", "pick_profile", "Profile"),
         Binding("ctrl+b", "run_benchmark", "Benchmark"),
+        Binding("ctrl+c", "open_config", "Config"),
         Binding("ctrl+s", "save_session", "Save Session"),
         Binding("ctrl+o", "load_session", "Load Session"),
         Binding("?", "show_shortcuts", "Shortcuts"),
@@ -242,6 +279,7 @@ class PolyMindApp(App):
         self.current_plan: AnalyzerPlan | None = None
         self.current_profile: str = "quality"
         self.chat_history: list[dict[str, str]] = []
+        self._tui_handler: TuiLogHandler | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -257,6 +295,33 @@ class PolyMindApp(App):
         chat_log.write(
             "[dim]PolyMind TUI ready. Type a message or press ? for help.[/]"
         )
+        cfg = Config.from_yaml(CONFIG_PATH)
+        if cfg.verbose:
+            self._enable_verbose_logging()
+
+    def _get_pipeline(self):
+        try:
+            return self.query_one(PipelinePanel)
+        except Exception:
+            return None
+
+    def _enable_verbose_logging(self) -> None:
+        if self._tui_handler is not None:
+            return
+        setup_logging(logging.DEBUG)
+        self._tui_handler = TuiLogHandler(self._get_pipeline)
+        self._tui_handler.setFormatter(
+            logging.Formatter("%(asctime)s | %(levelname)-7s | %(message)s", datefmt="%H:%M:%S")
+        )
+        root = logging.getLogger()
+        root.addHandler(self._tui_handler)
+
+    def _disable_verbose_logging(self) -> None:
+        if self._tui_handler is None:
+            return
+        root = logging.getLogger()
+        root.removeHandler(self._tui_handler)
+        self._tui_handler = None
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         prompt = event.value.strip()
@@ -384,7 +449,15 @@ class PolyMindApp(App):
             pipeline.set_status("Error")
             return
 
-        store = await run_benchmark(models=models, judge_model=self.config.judge_model)
+        def progress_callback(pct: float, msg: str):
+            pipeline.set_status(f"Benchmarking... {pct*100:.0f}%")
+            pipeline.log_line(f"[dim]{msg}[/]")
+
+        store = await run_benchmark(
+            models=models,
+            judge_model=self.config.judge_model,
+            progress_callback=progress_callback,
+        )
         ranks_path = Path("~/.polymind/ranks.yaml").expanduser()
         save_ranks(store, ranks_path)
         pipeline.log_line(f"[green]Benchmark done: {len(store.entries)} entries[/]")
@@ -430,8 +503,89 @@ class PolyMindApp(App):
         pipeline.set_strategy(self.strategy)
         pipeline.log_line(f"[green]Session loaded:[/] {latest}")
 
+    def action_open_config(self) -> None:
+        self.push_screen(ConfigScreen())
+
     def action_show_shortcuts(self) -> None:
         self.push_screen(ShortcutsScreen())
+
+
+class ConfigScreen(ModalScreen):
+    def compose(self) -> ComposeResult:
+        yield Static("[bold]Configuration[/]\n", id="config-title")
+        yield Label("Models:")
+        yield ListView(id="model-list")
+        yield Label("\nAdd Model:")
+        yield Horizontal(
+            Select(
+                [(p.value, p.value) for p in ProviderType],
+                prompt="Provider",
+                id="provider-select",
+            ),
+            Input(placeholder="Model name", id="model-name-input"),
+        )
+        yield Button("Add Model", id="add-model-btn", variant="primary")
+        yield Button("Auto-Detect Local Providers", id="detect-btn")
+        yield Label("\nVerbose Mode:")
+        yield Select(
+            [("on", "On"), ("off", "Off")],
+            prompt="Verbose",
+            id="verbose-select",
+            value="off",
+        )
+        yield Button("Save & Close", id="save-close-btn", variant="primary")
+
+    def on_mount(self) -> None:
+        self.load_config()
+
+    def load_config(self) -> None:
+        cfg = Config.from_yaml(CONFIG_PATH)
+        model_list = self.query_one("#model-list", ListView)
+        model_list.clear()
+        for m in cfg.models:
+            model_list.append(ListItem(Label(f"{m.provider}/{m.name}")))
+        verbose_select = self.query_one("#verbose-select", Select)
+        verbose_select.value = "on" if cfg.verbose else "off"
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "add-model-btn":
+            provider = self.query_one("#provider-select", Select).value
+            name = self.query_one("#model-name-input", Input).value.strip()
+            if provider and name:
+                cfg = Config.from_yaml(CONFIG_PATH)
+                cfg.models.append(ModelConfig(name=name, provider=provider))
+                cfg.to_yaml(CONFIG_PATH)
+                self.load_config()
+                self.query_one("#model-name-input", Input).value = ""
+        elif event.button.id == "detect-btn":
+            detected = detect_local_providers()
+            if not detected:
+                model_list = self.query_one("#model-list", ListView)
+                model_list.append(ListItem(Label("[red]No local providers detected[/]")))
+                return
+            cfg = Config.from_yaml(CONFIG_PATH)
+            for m in detected:
+                mc = ModelConfig(**m)
+                if mc not in cfg.models:
+                    cfg.models.append(mc)
+            cfg.to_yaml(CONFIG_PATH)
+            self.load_config()
+        elif event.button.id == "save-close-btn":
+            verbose = self.query_one("#verbose-select", Select).value == "on"
+            cfg = Config.from_yaml(CONFIG_PATH)
+            cfg.verbose = verbose
+            cfg.to_yaml(CONFIG_PATH)
+            app = self.app
+            if hasattr(app, '_enable_verbose_logging') and hasattr(app, '_disable_verbose_logging'):
+                if verbose:
+                    app._enable_verbose_logging()
+                else:
+                    app._disable_verbose_logging()
+            self.dismiss()
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss()
 
 
 def main() -> None:

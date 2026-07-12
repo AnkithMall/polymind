@@ -33,7 +33,7 @@ def test_cli_ranks_help():
 
 
 def test_cli_config_init_help():
-    result = runner.invoke(app, ["config-init", "--help"])
+    result = runner.invoke(app, ["config", "init", "--help"])
     assert result.exit_code == 0
 
 
@@ -65,6 +65,7 @@ def test_ranks_no_file():
 
 
 def test_ask_no_config():
-    result = runner.invoke(app, ["ask", "hello"])
-    assert result.exit_code == 1
-    assert "No config found" in result.output
+    with patch("polymind.cli.main.CONFIG_PATH", Path("/nonexistent/config.yaml")):
+        result = runner.invoke(app, ["ask", "hello"])
+        assert result.exit_code == 1
+        assert "No config found" in result.output

@@ -52,12 +52,25 @@ def _assign_models(
 ) -> None:
     for subtask in plan.subtasks:
         if subtask.assigned_model:
+            logger.debug(
+                "Subtask %s already assigned model %s, skipping",
+                subtask.id,
+                subtask.assigned_model,
+            )
             continue
 
         if rank_store is not None:
+            logger.debug(
+                "Looking up rank for subtask %s (domain=%s)",
+                subtask.id,
+                subtask.domain,
+            )
             top = rank_store.top_for_domain(subtask.domain, ranking_mode=ranking_mode)
             if top is not None and _model_matches_source(top.model, model_source):
                 subtask.assigned_model = top.model
+                logger.debug(
+                    "Subtask %s assigned ranked model %s", subtask.id, top.model
+                )
                 continue
 
             fallback_entries = rank_store.top_n_for_domain(
@@ -72,14 +85,25 @@ def _assign_models(
                     entry.model, model_source
                 ):
                     subtask.assigned_model = fallback_models[i]
+                    logger.debug(
+                        "Subtask %s assigned fallback model %s",
+                        subtask.id,
+                        fallback_models[i],
+                    )
                     break
 
         if subtask.assigned_model is None and not _model_matches_source(
             default_model, model_source
         ):
             subtask.assigned_model = default_model
+            logger.debug(
+                "Subtask %s assigned default model %s", subtask.id, default_model
+            )
         elif subtask.assigned_model is None:
             subtask.assigned_model = default_model
+            logger.debug(
+                "Subtask %s assigned default model %s", subtask.id, default_model
+            )
 
 
 def _topological_batches(
@@ -110,12 +134,13 @@ def _topological_batches(
                 queue.append(dep_of)
 
     if len(ordered) != len(plan.subtasks):
+        unscheduled = set(subtask_map.keys()) - set(ordered)
         logger.warning(
-            "Cycle detected: %d/%d tasks scheduled",
+            "Cycle detected: %d/%d tasks scheduled, unscheduled: %s",
             len(ordered),
             len(plan.subtasks),
+            unscheduled,
         )
-        unscheduled = set(subtask_map.keys()) - set(ordered)
         ordered.extend(unscheduled)
 
     return [[subtask_map[sid]] for sid in ordered]

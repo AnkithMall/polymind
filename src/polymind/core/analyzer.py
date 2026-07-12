@@ -90,6 +90,11 @@ async def analyze_prompt(
     **litellm_kwargs: Any,
 ) -> AnalyzerPlan:
     messages = _build_router_messages(prompt)
+    logger.debug(
+        "Sending router prompt to %s (prompt length=%d chars)",
+        router_model,
+        len(prompt),
+    )
 
     async def call_router() -> str:
         response = await litellm.acompletion(
@@ -113,10 +118,14 @@ async def analyze_prompt(
 
     try:
         raw = await call_router()
+        logger.debug("Raw router response (%d chars): %s", len(raw), raw[:200])
     except Exception:
         logger.warning("Router LLM call failed, using fallback with lower temperature")
         try:
             raw = await call_fallback()
+            logger.debug(
+                "Fallback router response (%d chars): %s", len(raw), raw[:200]
+            )
         except Exception:
             logger.error(
                 "Router LLM completely unavailable, returning single-task plan"
@@ -128,6 +137,10 @@ async def analyze_prompt(
         logger.warning(
             "Could not parse router response as JSON, using single-task fallback"
         )
+        logger.debug("Parse failed for raw response: %s", raw[:300])
         return _single_task_fallback(prompt)
 
+    logger.debug(
+        "Router plan parsed successfully: %d subtasks", len(plan.subtasks)
+    )
     return plan

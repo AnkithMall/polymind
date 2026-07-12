@@ -27,8 +27,11 @@ async def retry_with_backoff(
 ) -> T:
     last_error: Exception | None = None
     for attempt in range(max_retries):
+        logger.debug("Retry attempt %d/%d starting", attempt + 1, max_retries)
         try:
-            return await fn(*args, **kwargs)
+            result = await fn(*args, **kwargs)
+            logger.debug("Retry attempt %d/%d succeeded", attempt + 1, max_retries)
+            return result
         except Exception as e:
             last_error = e
             if attempt < max_retries - 1:
@@ -41,6 +44,7 @@ async def retry_with_backoff(
                     delay,
                 )
                 await asyncio.sleep(delay)
+    logger.debug("All %d retry attempts exhausted", max_retries)
     raise last_error  # type: ignore[misc]
 
 
@@ -50,6 +54,7 @@ async def fallback_chain(
 ) -> T:
     errors: list[Exception] = []
     for i, call in enumerate(callables):
+        logger.debug("Switching to fallback %d/%d", i + 1, len(callables))
         try:
             if timeout_s is not None:
                 return await asyncio.wait_for(call(), timeout=timeout_s)
@@ -58,6 +63,7 @@ async def fallback_chain(
             logger.warning("Fallback %d/%d failed: %s", i + 1, len(callables), e)
             errors.append(e)
 
+    logger.debug("All %d fallback attempts exhausted", len(callables))
     raise FallbackError(
         f"All {len(callables)} fallback attempts failed",
         errors=errors,
@@ -74,8 +80,11 @@ def sync_retry_with_backoff(
 ) -> T:
     last_error: Exception | None = None
     for attempt in range(max_retries):
+        logger.debug("Sync retry attempt %d/%d starting", attempt + 1, max_retries)
         try:
-            return fn(*args, **kwargs)
+            result = fn(*args, **kwargs)
+            logger.debug("Sync retry attempt %d/%d succeeded", attempt + 1, max_retries)
+            return result
         except Exception as e:
             last_error = e
             if attempt < max_retries - 1:
@@ -88,4 +97,5 @@ def sync_retry_with_backoff(
                     delay,
                 )
                 time.sleep(delay)
+    logger.debug("All %d sync retry attempts exhausted", max_retries)
     raise last_error  # type: ignore[misc]

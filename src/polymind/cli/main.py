@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
 from typing import Optional
@@ -23,29 +24,53 @@ from polymind.core import (
     SubtaskResult,
     analyze_prompt,
     build_schedule,
+    detect_local_providers,
     execute_subtask,
+    get_all_ollama_models,
     get_tasks_for_domain,
     load_ranks,
     resolve_model_string,
     run_benchmark,
     save_ranks,
+    setup_logging,
     synthesize,
 )
-from polymind.core.config import Config
+from polymind.core.config import Config, ModelConfig
+from polymind.core.providers import ProviderType
+from polymind.core.types import _rank_key, RankingMode
 
 app = typer.Typer(
     name="polymind",
     help="Multi-Specialist LLM Orchestrator — CLI · TUI · Local-First · Hardware-Optimised",
     no_args_is_help=True,
 )
+config_app = typer.Typer(
+    name="config",
+    help="Manage configuration and providers",
+    no_args_is_help=True,
+)
+app.add_typer(config_app, name="config")
 console = Console()
 
 CONFIG_PATH = Path("~/.polymind/config.yaml").expanduser()
 RANKS_PATH = Path("~/.polymind/ranks.yaml").expanduser()
 
 
+@app.callback()
+def main_callback(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed logs of what is happening",
+    ),
+):
+    if verbose:
+        setup_logging(logging.DEBUG)
+
+
 def _load_config() -> Config:
-    return Config.from_yaml(CONFIG_PATH)
+    config = Config.from_yaml(CONFIG_PATH)
+    if config.verbose:
+        setup_logging(logging.DEBUG)
+    return config
 
 
 def _ensure_config() -> Config:
@@ -176,37 +201,77 @@ def _print_breakdown(result: PipelineResult):
 
 @app.command()
 def benchmark(
-    models: list[str] = typer.Argument(
-        ..., help="Models to benchmark (e.g. ollama/llama3.2:1b)"
+    models: Optional[list[str]] = typer.Argument(
+        None, help="Models to benchmark (e.g. ollama/llama3.2:1b)"
     ),
     domains: Optional[list[str]] = typer.Option(
         None, "--domain", "-d", help="Domains to benchmark (default: all)"
     ),
+    auto_detect: bool = typer.Option(
+        False,
+        "--auto-detect",
+        "-a",
+        help="Auto-detect models from all configured providers",
+    ),
 ):
     """Run benchmark tasks against models to build rankings."""
     config = _load_config()
+
+    resolved_models = models
+    if auto_detect or not models:
+        detected = detect_local_providers()
+        if not detected:
+            console.print("[red]No local models detected. Install models or specify them explicitly.[/]")
+            raise typer.Exit(1)
+        if models:
+            detected = [m for m in detected if m["name"] in models or f"{m['provider']}/{m['name']}" in models]
+        resolved_models = [f"{m['provider']}/{m['name']}" for m in detected]
+        console.print(f"[cyan]Auto-detected models:[/] {', '.join(resolved_models)}")
+
     domain_list: list[DomainType] = (
         [DomainType(d) for d in domains] if domains else ALL_DOMAINS
     )
     judge = config.judge_model
 
+    total_models = len(resolved_models)
+    total_domains = len(domain_list)
+    tasks_per_domain = {d: len(get_tasks_for_domain(d)) for d in domain_list}
+    global_total = sum(tasks_per_domain.values()) * total_models
+
     with Progress(
-        SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
     ) as progress:
-        total_tasks = sum(len(get_tasks_for_domain(d)) for d in domain_list) * len(
-            models
-        )
+        prog_task = progress.add_task("[green]Benchmarking...", total=global_total)
 
-        prog_task = progress.add_task("[green]Benchmarking...", total=total_tasks)
+        model_idx = [0]
+        domain_idx = [0]
 
-        def progress_callback(msg: str):
-            progress.update(prog_task, description=f"[green]{msg}")
+        def progress_callback(pct: float, msg: str):
+            if " / " in msg:
+                parts = msg.split(" / ")
+                model_name = parts[0]
+                domain_name = parts[1]
+                task_info = parts[2] if len(parts) > 2 else ""
+            else:
+                model_name = ""
+                domain_name = ""
+                task_info = ""
+
+            domain_tasks = tasks_per_domain.get(
+                next((d for d in domain_list if d.value == domain_name), None), 0
+            )
+            desc = f"[green]{model_name} | {domain_name} | {task_info}"
+            progress.update(
+                prog_task,
+                completed=pct * global_total,
+                description=desc,
+            )
 
         store = asyncio.run(
             run_benchmark(
-                models=models,
+                models=resolved_models,
                 domains=domain_list,
                 judge_model=judge,
                 progress_callback=progress_callback,
@@ -220,8 +285,27 @@ def benchmark(
 
 
 @app.command()
-def ranks():
+def ranks(
+    best: bool = typer.Option(
+        False,
+        "--best",
+        "-b",
+        help="Show only the best model per domain",
+    ),
+    mode: str = typer.Option(
+        "accuracy",
+        "--mode",
+        "-m",
+        help="Ranking mode: accuracy, cost, or cost_effective",
+    ),
+):
     """Display current model rankings."""
+    try:
+        ranking_mode = RankingMode(mode)
+    except ValueError:
+        console.print(f"[red]Invalid mode: {mode}. Choose from: accuracy, cost, cost_effective[/]")
+        raise typer.Exit(1)
+
     store = load_ranks(RANKS_PATH)
     if not store.entries:
         console.print(
@@ -232,13 +316,50 @@ def ranks():
     if store.is_stale():
         console.print("[yellow]Warning: Rankings are older than 30 days.[/]\n")
 
-    _print_ranks(store)
+    _print_ranks(store, best=best, mode=ranking_mode)
 
 
-def _print_ranks(store):
+def _print_ranks(store, best: bool = False, mode: RankingMode = RankingMode.accuracy):
     from datetime import datetime
 
-    table = Table(title="Model Rankings")
+    now = datetime.now()
+
+    if best:
+        rows: list[tuple[str, str, str, str, str, str]] = []
+        for domain in ALL_DOMAINS:
+            top = store.top_for_domain(domain, mode)
+            if top is None:
+                continue
+            age_days = (now - top.timestamp).days if top.timestamp else 0
+            age_str = f"{age_days}d" if age_days > 0 else "today"
+            lat = f"{top.latency_ms:.0f}ms" if top.latency_ms else "-"
+            cost_str = f"${top.cost:.6f}" if top.cost is not None else "-"
+            score_str = f"{top.score:.2f}"
+            score_style = (
+                "green" if top.score >= 0.8 else "yellow" if top.score >= 0.5 else "red"
+            )
+            rows.append((top.domain.value, top.model, score_str, lat, cost_str,
+                         age_str, score_style))
+
+        if not rows:
+            console.print("[yellow]No rankings found for any domain.[/]")
+            return
+
+        title = f"Best per Domain (by {mode.value})"
+        table = Table(title=title)
+        table.add_column("Domain", style="cyan")
+        table.add_column("Model", style="yellow")
+        table.add_column("Score", justify="right")
+        table.add_column("Latency")
+        table.add_column("Cost", justify="right")
+        table.add_column("Age")
+        for domain, model, score_str, lat, cost_str, age_str, style in rows:
+            table.add_row(domain, model, Text(score_str, style=style), lat, cost_str, age_str)
+        console.print(table)
+        console.print(f"[dim]{len(rows)} domains shown[/]")
+        return
+
+    table = Table(title=f"Model Rankings (by {mode.value})")
     table.add_column("Domain", style="cyan")
     table.add_column("Model", style="yellow")
     table.add_column("Score", justify="right")
@@ -246,8 +367,8 @@ def _print_ranks(store):
     table.add_column("Cost", justify="right")
     table.add_column("Age")
 
-    now = datetime.now()
-    for entry in sorted(store.entries, key=lambda e: (e.domain.value, -e.score)):
+    key_fn = lambda e: (e.domain.value, -_rank_key(e, mode))
+    for entry in sorted(store.entries, key=key_fn):
         age_days = (now - entry.timestamp).days if entry.timestamp else 0
         age_str = f"{age_days}d" if age_days > 0 else "today"
         lat = f"{entry.latency_ms:.0f}ms" if entry.latency_ms else "-"
@@ -268,9 +389,9 @@ def _print_ranks(store):
     console.print(table)
 
 
-@app.command()
+@config_app.command("init")
 def config_init():
-    """Create an initial config interactively."""
+    """Create an initial config interactively with provider setup."""
     if CONFIG_PATH.exists():
         if not Confirm.ask(f"Config already exists at {CONFIG_PATH}. Overwrite?"):
             raise typer.Exit(0)
@@ -279,10 +400,49 @@ def config_init():
 
     console.print("[bold]PolyMind Config Initialization[/]\n")
 
-    model_name = Prompt.ask("Default Ollama model", default="llama3.2:1b")
+    models: list[ModelConfig] = []
+
+    if Confirm.ask("Auto-detect local providers (Ollama, LM Studio)?", default=True):
+        detected = detect_local_providers()
+        if detected:
+            console.print(f"[green]Detected {len(detected)} local model(s):[/]")
+            for m in detected:
+                console.print(f"  - {m['provider']}/{m['name']}")
+            if Confirm.ask("Add all detected models?", default=True):
+                models.extend(ModelConfig(**m) for m in detected)
+        else:
+            console.print("[yellow]No local providers detected.[/]")
+
+    if not models:
+        while True:
+            console.print("\n[bold]Add a provider:[/]")
+            provider = Prompt.ask(
+                "Provider type",
+                choices=["ollama", "lm_studio", "openai", "anthropic", "openrouter", "(done)"],
+                default="ollama",
+            )
+            if provider == "(done)":
+                break
+            model_name = Prompt.ask("Model name")
+            mc = ModelConfig(name=model_name, provider=provider)
+            if provider in ("lm_studio", "openai", "anthropic", "openrouter"):
+                base_url = Prompt.ask("Base URL (optional)", default="")
+                if base_url:
+                    mc.base_url = base_url
+                if provider in ("openai", "anthropic"):
+                    api_key = Prompt.ask("API Key (optional)", default="")
+                    if api_key:
+                        mc.api_key = api_key
+            models.append(mc)
+            if not Confirm.ask("Add another model?", default=True):
+                break
+
+    if not models:
+        models.append(ModelConfig(name="llama3.2:1b", provider="ollama"))
+
     router = Prompt.ask(
         "Router model (lightweight for task decomposition)",
-        default=f"ollama/{model_name}",
+        default=f"{models[0].provider}/{models[0].name}",
     )
     strategy = Prompt.ask(
         "Scheduler strategy",
@@ -303,7 +463,7 @@ def config_init():
     litellm_proxy = proxy.strip() or None
 
     config = Config(
-        models=[{"name": model_name, "provider": "ollama"}],
+        models=[m.model_dump() for m in models],
         router_model=router,
         synthesizer_model=router,
         judge_model=router,
@@ -314,6 +474,68 @@ def config_init():
     )
     config.to_yaml(CONFIG_PATH)
     console.print(f"\n[green]Config written to {CONFIG_PATH}[/]")
+
+
+@config_app.command("add-provider")
+def add_provider():
+    """Add a new provider/model to the config interactively."""
+    config = _ensure_config()
+
+    console.print("[bold]Add a Provider/Model[/]\n")
+
+    provider = Prompt.ask(
+        "Provider type",
+        choices=["ollama", "lm_studio", "openai", "anthropic", "openrouter"],
+    )
+    model_name = Prompt.ask("Model name")
+    mc = ModelConfig(name=model_name, provider=provider)
+
+    if provider in ("lm_studio", "openai", "anthropic", "openrouter"):
+        base_url = Prompt.ask("Base URL (optional)", default="")
+        if base_url:
+            mc.base_url = base_url
+        if provider in ("openai", "anthropic"):
+            api_key = Prompt.ask("API Key (optional)", default="")
+            if api_key:
+                mc.api_key = api_key
+
+    config.models.append(mc)
+    config.to_yaml(CONFIG_PATH)
+    console.print(f"[green]Added {provider}/{model_name} to config.[/]")
+
+
+@config_app.command("auto-detect")
+def auto_detect_providers():
+    """Auto-detect local providers and update config."""
+    config = _ensure_config()
+
+    console.print("[bold]Auto-detecting local providers...[/]\n")
+
+    detected = detect_local_providers()
+    if not detected:
+        console.print("[yellow]No local providers detected. Install Ollama or start LM Studio first.[/]")
+        raise typer.Exit(0)
+
+    console.print(f"[green]Detected {len(detected)} model(s):[/]")
+    for m in detected:
+        console.print(f"  - {m['provider']}/{m['name']}")
+
+    if Confirm.ask("Add all to config?", default=True):
+        for m in detected:
+            mc = ModelConfig(**m)
+            if mc not in config.models:
+                config.models.append(mc)
+        config.to_yaml(CONFIG_PATH)
+        console.print(f"\n[green]Config updated at {CONFIG_PATH}[/]")
+
+    # Set router/judge to first model if none set
+    if not config.router_model or config.router_model == "ollama/llama3.2:1b":
+        first = detected[0]
+        config.router_model = f"{first['provider']}/{first['name']}"
+        config.judge_model = config.router_model
+        config.synthesizer_model = config.router_model
+        config.to_yaml(CONFIG_PATH)
+        console.print(f"[green]Router set to {config.router_model}[/]")
 
 
 @app.command()
