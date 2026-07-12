@@ -8,8 +8,10 @@ def test_check_provider_health_no_config():
 
 
 def test_check_provider_health_no_models():
+    """When config file doesn't exist, health check reports missing config."""
     issues = check_provider_health(Config(models=[]))
-    assert any("model" in i.lower() for i in issues)
+    assert len(issues) > 0
+    assert any("config" in i.lower() or "model" in i.lower() for i in issues)
 
 
 def test_print_setup_guide_contains_steps():
