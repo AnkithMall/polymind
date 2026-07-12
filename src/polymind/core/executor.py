@@ -31,7 +31,7 @@ async def execute_subtask(
         kwargs["keep_alive"] = keep_alive
     kwargs.update(litellm_kwargs)
 
-    async def _call() -> tuple[str, int | None, int | None]:
+    async def _call() -> tuple[str, int | None, int | None, float]:
         start = time.monotonic()
         logger.debug(
             "Calling model %s for subtask %s (domain=%s)",
@@ -51,14 +51,15 @@ async def execute_subtask(
             "Response from %s for subtask %s: tokens=%d/%d latency=%.1fs",
             model, subtask.id, in_tokens or 0, out_tokens or 0, elapsed,
         )
-        return content, in_tokens, out_tokens
+        return content, in_tokens, out_tokens, elapsed
 
     try:
-        output, in_tokens, out_tokens = await retry_with_backoff(
+        output, in_tokens, out_tokens, elapsed = await retry_with_backoff(
             _call, max_retries=max_retries, base_delay_s=1.0
         )
         logger.debug(
-            "Subtask %s completed successfully on %s", subtask.id, model,
+            "Subtask %s completed successfully on %s (%.1fs)",
+            subtask.id, model, elapsed,
         )
     except Exception as e:
         logger.error(
@@ -79,6 +80,7 @@ async def execute_subtask(
         subtask_id=subtask.id,
         model=model,
         output=output,
+        latency_ms=round(elapsed * 1000, 2),
         input_tokens=in_tokens,
         output_tokens=out_tokens,
         cost=task_cost,

@@ -15,6 +15,7 @@ from polymind.core import (
     detect_local_providers,
     analyze_prompt,
     build_schedule,
+    describe_schedule,
     execute_subtask,
     load_ranks,
     resolve_model_string,
@@ -150,7 +151,8 @@ async def ask_endpoint(request: Request):
                 {"model": b.model, "subtask_ids": b.subtask_ids}
                 for b in schedule.batches
             ]
-            yield _sse("schedule", json.dumps(schedule_data))
+            schedule_visual = describe_schedule(plan, schedule)
+            yield _sse("schedule", json.dumps({"batches": schedule_data, "visual": schedule_visual}))
 
             subtask_results: list[SubtaskResult] = []
             prior_outputs: dict[str, SubtaskResult] = {}
@@ -226,13 +228,33 @@ async def benchmark_endpoint(request: Request):
     judge = config.judge_model
 
     async def event_generator():
+        queue: asyncio.Queue[str | None] = asyncio.Queue()
         try:
-            store = await run_benchmark(
-                models=models,
-                domains=domains,
-                judge_model=judge,
-                progress_callback=lambda pct, msg: None,
-            )
+            def _progress(pct: float, msg: str):
+                queue.put_nowait(
+                    _sse("progress", json.dumps({"pct": round(pct * 100, 1), "msg": msg}))
+                )
+
+            async def _run():
+                try:
+                    store, details = await run_benchmark(
+                        models=models,
+                        domains=domains,
+                        judge_model=judge,
+                        progress_callback=_progress,
+                    )
+                    return store, details
+                finally:
+                    queue.put_nowait(None)
+
+            task = asyncio.create_task(_run())
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield item
+
+            store, _details = task.result()
             save_ranks(store, RANKS_PATH)
             entries = [
                 {

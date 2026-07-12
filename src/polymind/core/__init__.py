@@ -32,7 +32,8 @@ from polymind.core.providers import (
     provider_model_source,
     resolve_model_string,
 )
-from polymind.core.scheduler import build_schedule, count_model_loads
+from polymind.core.scheduler import build_schedule, count_model_loads, describe_schedule
+from polymind.core.setup_guide import check_provider_health, health_report, print_setup_guide
 from polymind.core.synthesizer import synthesize, synthesize_streaming
 from polymind.core.types import (
     ALL_DOMAINS,
@@ -78,7 +79,11 @@ __all__ = [
     "SubtaskResult",
     "analyze_prompt",
     "build_schedule",
+    "check_provider_health",
     "count_model_loads",
+    "describe_schedule",
+    "health_report",
+    "print_setup_guide",
     "detect_local_providers",
     "detect_lm_studio_models",
     "estimate_tokens",

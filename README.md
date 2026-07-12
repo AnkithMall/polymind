@@ -1,4 +1,3 @@
-
 # PolyMind
 
 **Multi-Specialist LLM Orchestrator** — CLI · TUI · Web — Local-First · Hardware-Optimised
@@ -58,148 +57,75 @@ Running a single large general-purpose model on a laptop is slow and produces me
 PolyMind solves all of these problems with a data-driven, hardware-aware approach.
 
 ---
->>>>>>> dcf73f6 (Add comprehensive README with architecture, features, usage, and competitive analysis)
 
 ## Architecture
 
-```
-<<<<<<< HEAD
-User prompt
-    │
-    ▼
-Analyzer LLM (small, fast)
-  → decomposes into subtasks with domain tags
-    │
-    ▼
-Execution engine
-  → sequential (laptop/single-GPU safe) or parallel
-  → routes each subtask to its specialist model
-    │
-    ▼
-Synthesizer LLM
-  → merges all outputs into one coherent response
-    │
-    ▼
-Final response + transparency panel
+```mermaid
+flowchart TB
+    Prompt[User Prompt] --> Analyzer[Analyzer LLM]
+    Analyzer --> Scheduler[Scheduler<br/>DAG + Batching]
+    Scheduler --> Executor[Executor<br/>Subtask Runner]
+    RankStore[(Rank Store<br/>ranks.yaml)] -.-> Scheduler
+    Executor --> Synthesizer[Synthesizer LLM]
+    Synthesizer --> Response[Final Response]
+
+    subgraph Frontends
+        CLI[CLI · Typer]
+        TUI[TUI · Textual]
+        Web[Web UI · FastAPI]
+    end
+
+    Prompt --> Frontends
 ```
 
-## Configuration
-
-Edit `config.yaml` to map domains to your models:
-
-```yaml
-execution:
-  mode: sequential      # or parallel
-
-specialists:
-  code:
-    model: deepseek-coder:6.7b
-    provider: ollama
-  math:
-    model: qwen2.5-math:7b
-    provider: ollama
-  creative:
-    model: mistralai/mistral-7b-instruct
-    provider: openrouter
-    api_key: ${OPENROUTER_API_KEY}
-```
-
-## Supported Providers
-
-| Provider   | Config value  | Notes                          |
-|------------|---------------|--------------------------------|
-| Ollama     | `ollama`      | Local, free, GPU optional      |
-| LM Studio  | `lmstudio`    | Local, free, GUI               |
-| OpenRouter | `openrouter`  | 200+ models, free tier exists  |
-| OpenAI     | `openai`      | Paid API                       |
-| Anthropic  | `anthropic`   | Paid API                       |
-
-## Execution Modes
-
-- **Sequential** — subtasks run one at a time. Safe for single-GPU laptops. Use `pass_context: true` to chain model outputs.
-- **Parallel** — independent subtasks run concurrently. Faster for cloud providers.
-
-Switch modes without restarting: use the toggle in the UI header, or set `execution_mode` in API requests.
-
-## API
-
-PolyMind is OpenAI-compatible. Point any OpenAI client at `http://localhost:8000`:
-
-```python
-from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="none")
-response = client.chat.completions.create(
-    model="polymind",
-    messages=[{"role": "user", "content": "Explain recursion and write a Python example"}]
-)
-```
-
-## License
-
-MIT
-# polymind
-=======
-┌──────────────────────────────────────────────────────────────────────────┐
-│                             USER PROMPT                                  │
-└──────────────────────────┬───────────────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────────────┐
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐               │
-│  │  Analyzer    │───►│  Scheduler   │───►│  Executor    │               │
-│  │  (Router     │    │  (DAG +      │    │  (Subtask    │               │
-│  │   LLM)       │    │   Batching)  │    │   Runner)    │               │
-│  └──────────────┘    └──────────────┘    └──────┬───────┘               │
-│         │                      │                 │                       │
-│         │              ┌───────┴───────┐         │                       │
-│         │              │  Rank Store   │         │                       │
-│         │              │  (ranks.yaml) │         │                       │
-│         │              └───────────────┘         │                       │
-│         ▼                                        ▼                       │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │                     Synthesizer                                  │    │
-│  │           (Merges all subtask outputs)                           │    │
-│  └──────────────────────────┬───────────────────────────────────────┘    │
-│                             │                                            │
-│                             ▼                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐    │
-│  │                      FINAL RESPONSE                               │    │
-│  └──────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                   │
-│  │   CLI        │  │   TUI        │  │   Web UI     │                   │
-│  │   (Typer)    │  │   (Textual)  │  │   (FastAPI)   │                   │
-│  └──────────────┘  └──────────────┘  └──────────────┘                   │
-└──────────────────────────────────────────────────────────────────────────┘
-```
+---
 
 ### Pipeline Flow
 
-```
-Prompt ──► Analyze ──► Rank Lookup ──► Schedule ──► Execute ──► Synthesize ──► Response
-              │              │               │            │              │
-              ▼              ▼               ▼            ▼              ▼
-         Subtask Plan   Best Model per   Batch Tasks   Run Subtasks   Merge Outputs
-         (JSON +        Domain from      by Model to   with Retry +   via Synthesizer
-         Domains)       ranks.yaml       Minimize       Fallback       LLM
-                                          VRAM Swaps
+```mermaid
+flowchart LR
+    P[Prompt] --> A[Analyze]
+    A --> RL[Rank Lookup]
+    RL --> S[Schedule]
+    S --> E[Execute]
+    E --> Syn[Synthesize]
+    Syn --> R[Response]
+
+    A -.-> |Subtask Plan JSON + Domains| A2[ ]
+    RL -.-> |Best Model per Domain<br/>from ranks.yaml| RL2[ ]
+    S -.-> |Batch Tasks by Model<br/>to Minimize VRAM Swaps| S2[ ]
+    E -.-> |Run Subtasks<br/>with Retry + Fallback| E2[ ]
+    Syn -.-> |Merge Outputs<br/>via Synthesizer LLM| Syn2[ ]
 ```
 
 ### Smart Scheduler Algorithm
 
 The scheduler is PolyMind's most distinctive feature. Loading a model into VRAM typically takes 5–30 seconds. Naive execution causes repeated load/unload cycles.
 
-```
-Input: 6 tasks, 3 models
-T1(code), T2(math), T3(reasoning), T4(code), T5(code), T6(math)
-Dependencies: T2 depends on T1, T5 depends on T3
+```mermaid
+flowchart TB
+    subgraph Input[Input: 6 tasks, 3 models]
+        direction TB
+        I1[T1 code] --> I2[T2 math]
+        I3[T3 reasoning] --> I4[T5 code]
+        I5[T4 code]
+        I6[T6 math]
+    end
 
-Naive (dependency order):  8 model loads
-  Load A → T1 → Unload A → Load B → T2 → Unload B → Load C → T3
-  → Unload C → Load A → T4 → Load A → T5 → Unload A → Load B → T6
+    subgraph Naive[Naive: 8 model loads]
+        N1[Load A] --> N2[T1] --> N3[Unload A]
+        N3 --> N4[Load B] --> N5[T2] --> N6[Unload B]
+        N6 --> N7[Load C] --> N8[T3] --> N9[Unload C]
+        N9 --> N10[Load A] --> N11[T4]
+        N11 --> N12[T5] --> N13[Unload A]
+        N13 --> N14[Load B] --> N15[T6]
+    end
 
-Smart (model-aware):       4 model loads
-  Load A → T1, T4, T5 → Unload A → Load B → T2, T6 → Unload B → Load C → T3
+    subgraph Smart[Smart model-aware: 4 model loads]
+        S1[Load A] --> S2[T1] --> S3[T4] --> S4[T5] --> S5[Unload A]
+        S5 --> S6[Load B] --> S7[T2] --> S8[T6] --> S9[Unload B]
+        S9 --> S10[Load C] --> S11[T3]
+    end
 ```
 
 The smart scheduler:
@@ -207,6 +133,185 @@ The smart scheduler:
 2. Groups tasks by their assigned model
 3. Walks the DAG topologically with **lookahead** — when loading a model, scans ahead for all ready tasks that use the same model
 4. Executes the full batch before unloading
+
+### Deep Dive: How the Scheduler Works
+
+This section explains the scheduler from the ground up — what a DAG is, why topological order matters, how model-aware batching saves VRAM loads, and how the recursive lookahead algorithm works.
+
+#### 1. Directed Acyclic Graph (DAG)
+
+A **DAG** is a graph where:
+- **Nodes** = subtasks (T1, T2, …, Tn)
+- **Edges** = dependencies (T1 → T2 means "T2 depends on T1")
+- **Direction** = edges point from dependency to dependent
+- **Acyclic** = no circular dependencies (A needs B, B needs A is forbidden)
+
+```
+T1 (code) ──► T2 (math)     T3 (reasoning) ──► T5 (code)
+                    │
+                    └──► T4 (code)
+```
+
+In PolyMind, the `Analyzer` LLM reads your prompt and emits a structured plan with explicit dependency edges encoded in `depends_on`:
+
+```python
+class Subtask(BaseModel):
+    id: str
+    domain: DomainType       # code, math, reasoning, …
+    prompt: str
+    depends_on: list[str]    # IDs this task needs before it can run
+    assigned_model: str | None = None  # set by _assign_models()
+```
+
+#### 2. Topological Sort (Kahn's Algorithm)
+
+Once we have a DAG, we need an **execution order** that respects all dependencies — this is called a **topological ordering**. PolyMind uses **Kahn's algorithm**:
+
+```
+in_degree  = number of dependencies each task has (edges pointing TO it)
+ready      = queue of tasks with in_degree == 0 (nothing blocks them)
+
+while ready is not empty:
+    pick a task from ready
+    add it to the ordered result
+    for each task that depends on it:
+        decrement its in_degree
+        if in_degree reaches 0 → it's now ready, add to ready
+
+if ordered.length < total_tasks:
+    a cycle exists — fall back to appending remaining tasks
+```
+
+Example: given the DAG above:
+
+| Step | Task | in_degree before | Action |
+|------|------|-----------------|--------|
+| 1 | T1 | 0 | Ready initially, pick it |
+| 2 | T3 | 0 | Ready initially, pick it |
+| 3 | T2 | 1→0 | T1 done → T2 unblocked, pick it |
+| 4 | T4 | 0 | T2 done → T4 unblocked, pick it |
+| 5 | T5 | 1→0 | T3 done → T5 unblocked, pick it |
+
+Result: T1 → T3 → T2 → T4 → T5 (topologically valid)
+
+#### 3. Model Assignment
+
+Before scheduling, each task is assigned a model by `_assign_models()`:
+
+```python
+for subtask in plan.subtasks:
+    if rank_store has an entry for subtask.domain:
+        use the top-ranked model
+    elif fallback_models are configured:
+        use the first fallback matching the source filter
+    else:
+        use the default model
+```
+
+This is a **rank-based routing** — the model with the highest benchmark score for that domain gets the task.
+
+#### 4. The Model-Aware Batching Problem
+
+Now we have:
+- A topological order
+- Each task assigned to a model (A, B, or C)
+
+**Naive execution** = run tasks one-by-one in topological order, loading/unloading at every model switch:
+
+```
+Load A → T1 → Unload A → Load B → T2 → Unload B → Load C → T3 → ...
+```
+
+Each model load takes **5–30 seconds** on typical hardware. For 10 model switches, that's up to 5 minutes of pure loading overhead.
+
+**Goal**: batch all consecutive tasks that use the **same model** into a single load event.
+
+#### 5. Recursive Lookahead Algorithm
+
+The core optimization is `_model_aware_batches()`:
+
+```
+ready         = queue of tasks whose dependencies are met
+scheduled     = set of tasks already assigned to a batch
+in_degree     = remaining dependency count (decremented as deps complete)
+dependents    = reverse edges: for each task, which tasks depend on it
+
+while ready is not empty:
+    pick a task from ready → this starts a new batch
+    model = task.assigned_model
+
+    ┌─ Phase 1: Group all currently-ready tasks with the same model ─┐
+    drain remaining ready queue into a list
+    for each candidate in that list:
+        if candidate also uses 'model':
+            add to current batch
+        else:
+            put back in ready queue
+
+    ┌─ Phase 2: Recursive lookahead ────────────────────────────────┐
+    for every task now in the batch:
+        for each dependent that was blocked by this task:
+            decrement in_degree
+            if in_degree reaches 0:
+                if this newly-ready task uses 'model':
+                    add to batch → continue processing its dependents
+                else:
+                    add to ready queue for a future batch
+
+    repeat Phase 2 until no more same-model tasks become ready
+    → commit the batch
+```
+
+**Why recursive lookahead matters**: Without it, tasks that become unblocked *during* a batch but use the same model would require a separate load. Recursive lookahead catches them, potentially eliminating extra loads.
+
+#### 6. Worked Example
+
+Prompt: *"Write a Python script to analyze stock data and visualize trends"*
+
+The Analyzer decomposes this into:
+
+| Task | Domain | Dependencies | Assigned Model |
+|------|--------|-------------|----------------|
+| T1 | code | — | llama3.2 (model-a) |
+| T2 | math | T1 | qwen2.5-math (model-b) |
+| T3 | reasoning | — | mistral (model-c) |
+| T4 | code | — | llama3.2 (model-a) |
+| T5 | code | T3 | llama3.2 (model-a) |
+| T6 | math | — | qwen2.5-math (model-b) |
+
+DAG:
+```
+T1 ──► T2     T3 ──► T5
+                   
+T4              T6
+```
+
+**Step-by-step execution of the algorithm:**
+
+| Round | Ready Queue | Pick | Batch (Phase 1) | Lookahead (Phase 2) | Batch Committed |
+|-------|-------------|------|-----------------|---------------------|-----------------|
+| 1 | T1, T3, T4, T6 | T1 (A) | T4 (A) added | T2 unblocked (B) → ready | [A]: T1, T4 |
+| 2 | T3, T6, T2 | T3 (C) | — | T5 unblocked (A) → ready | [C]: T3 |
+| 3 | T6, T2, T5 | T6 (B) | T2 (B) added | — | [B]: T6, T2 |
+| 4 | T5 | T5 (A) | — | — | [A]: T5 |
+
+**Model loads**: A → C → B → A = **4 loads** (vs. 6 loads naive)
+
+#### 7. Strategy Comparison
+
+| Strategy | Algorithm | Use Case | Model Loads |
+|----------|-----------|----------|-------------|
+| `sequential` | Topological sort, one task per batch | Debugging, minimal VRAM | Highest |
+| `model_aware` | Recursive lookahead batching | Default — balances VRAM and parallelism | Low |
+| `parallel` | All ready tasks per round (grouped by model) | High-RAM servers, cloud APIs | Varies |
+
+You can see this optimization live by running:
+
+```bash
+polymind --verbose ask "Explain quantum computing"
+```
+
+This prints the DAG, model assignments, batches, and load-count comparison to the terminal.
 
 ---
 
@@ -218,12 +323,11 @@ polymind/
 ├── .github/workflows/ci.yml        # CI: pytest on push (3.11, 3.12)
 │
 ├── src/polymind/
-│   ├── __init__.py
+│   ├── __init__.py                 #   Public API exports
 │   │
 │   ├── core/                       # ★ Core library (provider-agnostic)
-│   │   ├── __init__.py             #   Public API exports
-│   │   ├── types.py                #   Pydantic models (Subtask, AnalyzerPlan,
-│   │   │                           #     RankEntry, ExecutionSchedule, etc.)
+│   │   ├── __init__.py
+│   │   ├── types.py                #   Pydantic models + RankingMode enum
 │   │   ├── config.py               #   YAML config loader with ${ENV_VAR}
 │   │   ├── providers.py            #   LiteLLM model string builder
 │   │   ├── fallback.py             #   Retry with backoff + fallback chain
@@ -234,26 +338,29 @@ polymind/
 │   │   │                           #     model-aware batching
 │   │   ├── benchmark.py            #   9 domain × 5 tasks, scoring,
 │   │   │                           #     ranks.yaml I/O
-│   │   ├── hardware.py             #   RAM/VRAM/CPU scanner
+│   │   ├── hardware.py             #   RAM/VRAM/CPU scanner + auto-detect providers
+│   │   ├── logging_setup.py        #   Debug logging via --verbose flag
 │   │   └── context.py              #   Token estimation, budget manager
 │   │
 │   ├── cli/                        # CLI frontend (Typer + Rich)
 │   │   ├── __init__.py
-│   │   └── main.py                 #   6 commands: ask, benchmark, ranks,
-│   │                               #     config-init, status, diff
+│   │   └── main.py                 #   Commands: ask, benchmark, ranks, status,
+│   │                               #     diff, config (init, add-provider, auto-detect)
 │   │
 │   ├── tui/                        # TUI frontend (Textual)
 │   │   ├── __init__.py
 │   │   ├── __main__.py             #   Entry: python3 -m polymind.tui
-│   │   └── app.py                  #   2-panel chat + pipeline inspector
+│   │   └── app.py                  #   Chat + pipeline inspector + ConfigScreen
+│   │                               #   (model add/remove, auto-detect, verbose)
 │   │
 │   └── web/                        # Web frontend (FastAPI + SSE)
 │       ├── __init__.py
-│       ├── app.py                  #   API: /api/ask, /api/benchmark, etc.
+│       ├── app.py                  #   API: /api/ask, /api/benchmark,
+│       │                           #   /api/providers/detect, /api/config
 │       └── static/
-│           └── index.html          #   SPA with chat + pipeline panel
+│           └── index.html          #   SPA with chat, config, and benchmark tabs
 │
-└── tests/                          # 114+ tests across all modules
+└── tests/                          # 116+ tests across all modules
     ├── test_types.py
     ├── test_config.py
     ├── test_providers.py
@@ -310,6 +417,7 @@ A configurable synthesizer model receives the original prompt and all subtask ou
 |---------|------|-------------|
 | **Prompt Decomposition** | `core/analyzer.py` | Router LLM breaks prompts into typed subtasks with dependency graphs |
 | **Model Benchmarking** | `core/benchmark.py` | 9 domains × 5 benchmark tasks; exact-match + LLM-as-judge scoring |
+| **Auto-Detect Providers** | `core/hardware.py` | Detects local Ollama and LM Studio models automatically |
 | **Cost Tracking** | `core/benchmark.py` | Tracks token usage and computes cost per model during benchmarks |
 | **Cost-Based Ranking** | `core/types.py` | Ranking modes: `accuracy`, `cost`, `cost_effective` (accuracy ÷ cost) |
 | **Model Source Filter** | `core/scheduler.py` | Filter models by source: `local`, `online`, or `all` |
@@ -317,16 +425,21 @@ A configurable synthesizer model receives the original prompt and all subtask ou
 | **Smart Scheduling** | `core/scheduler.py` | DAG-based model-aware batching reduces VRAM load events by 40-60% |
 | **Multi-Provider** | `core/providers.py` | Ollama, LM Studio, OpenRouter, OpenAI, Anthropic via LiteLLM |
 | **Fallback Chain** | `core/fallback.py` | Retry with backoff → fallback model → error result |
-| **Config Management** | `core/config.py` | YAML config with `${ENV_VAR}` resolution |
+| **Config Management** | `core/config.py` / `cli/main.py` | YAML config with `${ENV_VAR}` resolution + interactive CLI wizards |
+| **Verbose Logging** | `core/logging_setup.py` | Global `--verbose` flag enables debug logging across CLI, TUI, and Web |
 
 ### Polish Features
 
 | Feature | File | Description |
 |---------|------|-------------|
 | **Hardware Profiler** | `core/hardware.py` | Scans RAM/VRAM/CPU, recommends optimal strategy |
+| **Provider Auto-Detect** | `core/hardware.py` | `detect_local_providers()` for Ollama + LM Studio |
 | **Context Budget** | `core/context.py` | Token estimation, truncation, 17 model family limits |
 | **Routing Profiles** | `core/config.py` | `quality`/`fast`/`private` presets |
 | **Keep-Alive** | `core/executor.py` | Ollama model warm-up between batches |
+| **TUI Config Screen** | `tui/app.py` | In-app model add/remove, auto-detect, verbose toggle |
+| **Web Config API** | `web/app.py` | `GET /api/providers/detect`, `POST /api/config` |
+| **Web Config UI** | `web/static/index.html` | Config tab with model management + verbose checkbox |
 
 ### Frontends
 
@@ -338,14 +451,27 @@ A configurable synthesizer model receives the original prompt and all subtask ou
 
 ### CLI Commands
 
-```
-polymind ask <prompt>          Run a prompt through the full pipeline
-polymind benchmark <models>    Run benchmark tasks against models
-polymind ranks                 Display current model rankings
-polymind status                Show config health and rankings age
-polymind config-init           Interactive config wizard
-polymind diff <prompt> <models> Compare model outputs side by side
-```
+Global flags:
+
+| Flag | Description |
+|------|-------------|
+| `--verbose` / `-v` | Show detailed debug logs of what is happening |
+
+Commands:
+
+| Command | Description |
+|---------|-------------|
+| `polymind ask <prompt>` | Run a prompt through the full pipeline |
+| `polymind benchmark [models...]` | Run benchmark tasks against models |
+| `polymind benchmark --auto-detect` | Auto-detect models from all configured providers |
+| `polymind ranks` | Display all model rankings |
+| `polymind ranks --best` | Show only the best model per domain |
+| `polymind ranks --mode <mode>` | Rank by `accuracy` / `cost` / `cost_effective` |
+| `polymind status` | Show config health and rankings age |
+| `polymind diff <prompt> <models...>` | Compare model outputs side by side |
+| `polymind config init` | Interactive config wizard |
+| `polymind config add-provider` | Add a provider/model interactively |
+| `polymind config auto-detect` | Auto-detect local providers and update config |
 
 ---
 
@@ -384,15 +510,23 @@ pip install -e ".[all]"             # Everything
 ### 1. Configure
 
 ```bash
-polymind config-init
+polymind config init          # Interactive wizard
+polymind config auto-detect   # Auto-detect local Ollama/LM Studio models
 ```
 
-This creates `~/.polymind/config.yaml` interactively.
+This creates `~/.polymind/config.yaml` interactively with your providers.
 
 ### 2. Run a Benchmark
 
 ```bash
+# Benchmark specific models
 polymind benchmark ollama/llama3.2:1b ollama/mistral
+
+# Auto-detect and benchmark all local models
+polymind benchmark --auto-detect
+
+# Benchmark with verbose logging
+polymind --verbose benchmark --auto-detect
 ```
 
 Measures each model across 9 domains and writes results to `~/.polymind/ranks.yaml`.
@@ -497,6 +631,17 @@ When `ranking_mode` is set to `cost` or `cost_effective`, benchmark cost data is
 | `local` | Only use local models (Ollama, LM Studio) |
 | `online` | Only use online models (OpenAI, Anthropic, OpenRouter) |
 
+### Verbose Logging
+
+Set `verbose: true` in config or pass `--verbose` / `-v` globally to enable debug logging:
+
+```bash
+polymind --verbose ask "What is quantum computing?"
+polymind --verbose benchmark --auto-detect
+```
+
+Verbose mode works with all commands in CLI, TUI (`Ctrl+C` → Config → toggle Verbose), and Web UI (Config tab → Verbose checkbox). Debug logs show model selection, scheduling decisions, retry attempts, and timing.
+
 ### LiteLLM Proxy
 
 Set `litellm_proxy` to a base URL to route all LLM calls through a [LiteLLM proxy](https://litellm.vercel.app/docs/proxy/proxy_server):
@@ -526,6 +671,9 @@ base_url: ${OLLAMA_HOST}
 # Ask with custom model
 polymind ask "Explain quantum computing" --model ollama/mistral
 
+# Ask with verbose debug logging
+polymind --verbose ask "Explain recursion"
+
 # Review subtask plan before execution
 polymind ask "Build a REST API" --review
 
@@ -534,6 +682,17 @@ polymind diff "What is the capital of France?" ollama/llama3.2:1b ollama/mistral
 
 # Benchmark specific domains
 polymind benchmark ollama/llama3.2:1b --domain code --domain math
+
+# Auto-detect and benchmark all local models
+polymind benchmark --auto-detect
+
+# Show best model per domain by cost effectiveness
+polymind ranks --best --mode cost_effective
+
+# Interactive config management
+polymind config init
+polymind config add-provider
+polymind config auto-detect
 
 # Check system status
 polymind status
@@ -547,6 +706,7 @@ polymind status
 | `Ctrl+M` | Cycle execution strategy |
 | `Ctrl+P` | Open profile picker |
 | `Ctrl+B` | Run benchmark in background |
+| `Ctrl+C` | Open config screen (add/remove models, auto-detect, verbose) |
 | `Ctrl+S` | Save current session |
 | `Ctrl+O` | Load a session |
 | `?` | Shortcut reference |
@@ -565,8 +725,10 @@ polymind status
 | **Model benchmarking** | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
 | **Cost-based ranking** | ✅ accuracy / cost / cost_effective | ❌ | ❌ | ❌ | ❌ |
 | **Task decomposition** | ✅ Auto | ❌ Manual | ❌ | ❌ | ❌ |
+| **Auto-detect providers** | ✅ Ollama + LM Studio | ❌ | ❌ | ❌ | ❌ |
 | **VRAM-aware scheduling** | ✅ DAG + lookahead | ❌ | ❌ | ❌ | ❌ |
 | **CLI / TUI / Web** | ✅ All three | ❌ Web-only | ❌ CLI only | ❌ Library only | ❌ API only |
+| **Verbose debugging** | ✅ Global --verbose | ❌ | ❌ | ❌ | ❌ |
 | **Hardware profiling** | ✅ Auto-recommend | ❌ | ❌ | ❌ | ❌ |
 | **Provider agnostic** | ✅ Ollama/LM Studio/OpenAI/Anthropic | ❌ | ❌ Ollama only | ✅ | ❌ |
 | **LiteLLM proxy support** | ✅ | ❌ | ❌ | ✅ | ❌ |
@@ -608,27 +770,57 @@ polymind status
 ### Running Tests
 
 ```bash
-pytest tests/ -v          # 114 tests
-pytest tests/ -v --cov    # With coverage
+./run_tests.py                    # Single-command runner with detailed summary
+pytest tests/ -v                  # Standard pytest (unit + integration)
+pytest tests/ -v --cov            # With coverage report
 ```
 
 ### Test Structure
 
 ```
 tests/
-├── test_analyzer.py       # 9 tests — router prompts, JSON parsing, fallback
-├── test_benchmark.py      # 15 tests — task suites, scoring, ranks I/O
-├── test_cli.py            # 9 tests — help, status, error handling
-├── test_config.py         # 8 tests — YAML load, env vars, serialization
-├── test_context.py        # 11 tests — token estimation, budget, truncation
-├── test_executor.py       # 3 tests — subtask execution, context injection
-├── test_fallback.py       # 6 tests — retry, backoff, fallback chain
-├── test_hardware.py       # 6 tests — hardware info, strategy recommendation
-├── test_profiles.py       # 7 tests — routing profiles, keep-alive
-├── test_providers.py      # 7 tests — model string resolution, kwargs
-├── test_scheduler.py      # 14 tests — DAG, topological sort, batching
-├── test_synthesizer.py    # 6 tests — message building, streaming
-└── test_types.py          # 7 tests — all Pydantic models
+├── integration/                  # Cross-module integration tests
+│   ├── test_pipeline_flow.py     # Plan → schedule → execute → synthesize
+│   ├── test_benchmark_flow.py    # Benchmark → save → load → query ranks
+│   └── test_data_integrity.py    # depends_on refs, task counts, domains
+├── test_analyzer.py              # Router prompts, JSON parsing, fallback
+├── test_benchmark.py             # Task suites, scoring, ranks I/O
+├── test_cli.py                   # Help, status, error handling
+├── test_config.py                # YAML load, env vars, serialization
+├── test_context.py               # Token estimation, budget, truncation
+├── test_executor.py              # Subtask execution, context injection
+├── test_fallback.py              # Retry, backoff, fallback chain
+├── test_hardware.py              # Hardware info, strategy recommendation
+├── test_profiles.py              # Routing profiles, keep-alive
+├── test_providers.py             # Model string resolution, kwargs
+├── test_scheduler.py             # DAG, topological sort, batching,
+│                                 #   model-aware lookahead, describe_schedule,
+│                                 #   latency guards
+├── test_setup_guide.py           # Provider health checks, setup instructions
+├── test_synthesizer.py           # Message building, streaming
+└── test_types.py                 # Pydantic models, ranking modes
+```
+
+### Latest Test Results
+
+```
+────────────────────────────────────────────────────────────────────────
+  UNIT TESTS — individual feature modules
+────────────────────────────────────────────────────────────────────────
+  14 files — all passed
+
+────────────────────────────────────────────────────────────────────────
+  INTEGRATION TESTS — cross-module flows
+────────────────────────────────────────────────────────────────────────
+  9 tests — all passed
+
+────────────────────────────────────────────────────────────────────────
+  SUMMARY
+────────────────────────────────────────────────────────────────────────
+  Unit tests                      14 passed,   0 failed
+  Integration tests              PASS
+  Total duration                  ~80s
+  Exit code                       0
 ```
 
 ### Adding a New Provider

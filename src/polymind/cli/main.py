@@ -24,11 +24,15 @@ from polymind.core import (
     SubtaskResult,
     analyze_prompt,
     build_schedule,
+    check_provider_health,
+    describe_schedule,
     detect_local_providers,
     execute_subtask,
     get_all_ollama_models,
     get_tasks_for_domain,
+    health_report,
     load_ranks,
+    print_setup_guide,
     resolve_model_string,
     run_benchmark,
     save_ranks,
@@ -75,11 +79,17 @@ def _load_config() -> Config:
 
 def _ensure_config() -> Config:
     if not CONFIG_PATH.exists():
-        console.print(
-            "[yellow]No config found. Run [bold]polymind config init[/] first.[/]"
-        )
+        console.print(print_setup_guide())
         raise typer.Exit(1)
-    return _load_config()
+    config = _load_config()
+    issues = check_provider_health(config)
+    if issues:
+        console.print("[yellow]Configuration issues detected:[/]")
+        for issue in issues:
+            console.print(f"  [red]• {issue}[/]")
+        console.print(print_setup_guide())
+        raise typer.Exit(1)
+    return config
 
 
 @app.command()
@@ -136,9 +146,9 @@ async def _async_ask(
         for batch in schedule.batches:
             batch.model = model
 
-    console.print(f"\n[bold]Schedule:[/] [dim]{schedule.strategy.value}[/]")
-    for batch in schedule.batches:
-        console.print(f"  [cyan]{batch.model}[/]: {', '.join(batch.subtask_ids)}")
+    console.print()
+    for line in describe_schedule(plan, schedule).split("\n"):
+        console.print(line)
 
     subtask_results: list[SubtaskResult] = []
     prior_outputs: dict[str, SubtaskResult] = {}
@@ -213,6 +223,12 @@ def benchmark(
         "-a",
         help="Auto-detect models from all configured providers",
     ),
+    report: bool = typer.Option(
+        False,
+        "--report",
+        "-r",
+        help="Show detailed per-task benchmark report after completion",
+    ),
 ):
     """Run benchmark tasks against models to build rankings."""
     config = _load_config()
@@ -269,17 +285,56 @@ def benchmark(
                 description=desc,
             )
 
-        store = asyncio.run(
+        store, details = asyncio.run(
             run_benchmark(
                 models=resolved_models,
                 domains=domain_list,
                 judge_model=judge,
                 progress_callback=progress_callback,
+                collect_details=report,
             )
         )
 
     save_ranks(store, RANKS_PATH)
     console.print(f"\n[green]Benchmark complete![/] Saved to [bold]{RANKS_PATH}[/]")
+
+    if report and details:
+        console.print("\n[bold cyan]Benchmark Report[/]\n")
+        task_table = Table(title="Per-Task Results")
+        task_table.add_column("Model", style="yellow")
+        task_table.add_column("Domain", style="cyan")
+        task_table.add_column("Task", style="white")
+        task_table.add_column("Expected")
+        task_table.add_column("Score", justify="right")
+        task_table.add_column("Latency", justify="right")
+        task_table.add_column("Status")
+
+        for d in details:
+            status = "[red]ERROR[/]" if d.error else "[green]OK[/]"
+            lat = f"{d.latency_ms:.0f}ms"
+            score_str = f"{d.score:.2f}"
+            score_style = "green" if d.score >= 0.8 else "yellow" if d.score >= 0.5 else "red"
+            task_table.add_row(
+                d.model,
+                d.domain.value,
+                d.task.prompt[:60] + ("…" if len(d.task.prompt) > 60 else ""),
+                d.task.expected_answer,
+                Text(score_str, style=score_style),
+                lat,
+                status,
+            )
+        console.print(task_table)
+
+        # Summary statistics
+        total = len(details)
+        passed = sum(1 for d in details if not d.error and d.score >= 0.5)
+        failed = total - passed
+        avg_score = sum(d.score for d in details) / total if total > 0 else 0
+        avg_lat = sum(d.latency_ms for d in details) / total if total > 0 else 0
+        console.print(
+            f"\n[bold]Summary:[/] {passed}/{total} passed ({failed} failed)"
+            f"  |  Avg score: {avg_score:.2f}  |  Avg latency: {avg_lat:.0f}ms"
+        )
 
     _print_ranks(store)
 

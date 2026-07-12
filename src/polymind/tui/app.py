@@ -18,6 +18,7 @@ from textual.widgets import (
     Label,
     ListItem,
     ListView,
+    ProgressBar,
     RichLog,
     Static,
     Select,
@@ -35,6 +36,7 @@ from polymind.core import (
     SubtaskResult,
     analyze_prompt,
     build_schedule,
+    describe_schedule,
     detect_local_providers,
     execute_subtask,
     load_ranks,
@@ -148,6 +150,7 @@ class PipelinePanel(Vertical):
         yield Static("[bold]Pipeline Inspector[/]", id="pipeline-title")
         yield Static("Strategy: model_aware", id="strategy-label")
         yield Static("Ready", id="status-label")
+        yield ProgressBar(total=100, id="bench-progress", show_eta=False)
         yield RichLog(highlight=True, markup=True, id="pipeline-log")
 
     def _log(self) -> RichLog:
@@ -365,9 +368,8 @@ class PolyMindApp(App):
                 ranking_mode=self.config.ranking_mode,
                 model_source=self.config.model_source,
             )
-            pipeline.log_line(f"[cyan]Schedule:[/] {self.strategy.value}")
-            for batch in schedule.batches:
-                pipeline.log_line(f"  {batch.model}: {', '.join(batch.subtask_ids)}")
+            for line in describe_schedule(plan, schedule).split("\n"):
+                pipeline.log_line(line)
 
             results: list[SubtaskResult] = []
             prior_outputs: dict[str, SubtaskResult] = {}
@@ -375,7 +377,9 @@ class PolyMindApp(App):
             pipeline.set_status("Executing subtasks...")
             for batch_idx, batch in enumerate(schedule.batches):
                 pipeline.log_line(
-                    f"[dim]Batch {batch_idx + 1}/{len(schedule.batches)}[/]"
+                    f"[bold]Batch {batch_idx + 1}/{len(schedule.batches)}[/] "
+                    f"[cyan]model={batch.model}[/] "
+                    f"[dim]({', '.join(batch.subtask_ids)})[/]"
                 )
                 for sid in batch.subtask_ids:
                     subtask = next(s for s in plan.subtasks if s.id == sid)
@@ -387,7 +391,8 @@ class PolyMindApp(App):
                     prior_outputs[sid] = result
                     status = "[red]ERR[/]" if result.error else "[green]OK[/]"
                     pipeline.log_line(
-                        f"  {result.subtask_id} on {result.model}: {status}"
+                        f"  [dim]{result.subtask_id}[/] "
+                        f"[yellow]{subtask.domain.value}[/]: {status}",
                     )
 
             pipeline.set_status("Synthesizing...")
@@ -442,22 +447,26 @@ class PolyMindApp(App):
         pipeline = self.query_one(PipelinePanel)
         pipeline.set_status("Benchmarking...")
         pipeline.log_line("[cyan]Starting benchmark...[/]")
+        prog_bar = pipeline.query_one("#bench-progress", ProgressBar)
+        prog_bar.update(progress=0)
 
-        models = [f"ollama/{m.name}" for m in self.config.models]
+        models = [f"{m.provider}/{m.name}" for m in self.config.models]
         if not models:
             pipeline.log_line("[red]No models configured[/]")
             pipeline.set_status("Error")
             return
 
         def progress_callback(pct: float, msg: str):
+            self.call_from_thread(prog_bar.update, progress=pct * 100)
             pipeline.set_status(f"Benchmarking... {pct*100:.0f}%")
             pipeline.log_line(f"[dim]{msg}[/]")
 
-        store = await run_benchmark(
+        store, _details = await run_benchmark(
             models=models,
             judge_model=self.config.judge_model,
             progress_callback=progress_callback,
         )
+        prog_bar.update(progress=100)
         ranks_path = Path("~/.polymind/ranks.yaml").expanduser()
         save_ranks(store, ranks_path)
         pipeline.log_line(f"[green]Benchmark done: {len(store.entries)} entries[/]")

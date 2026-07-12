@@ -172,31 +172,43 @@ def _model_aware_batches(
             continue
 
         model = subtask_map[sid].assigned_model or "unknown"
-
         batch_ids = [sid]
         scheduled.add(sid)
 
-        remaining: list[str] = []
-        while ready:
-            remaining.append(ready.popleft())
-
+        # Phase 1 — group all currently-ready tasks that share the same model.
+        # Tasks for other models stay in the ready queue.
+        remaining: list[str] = list(ready)
+        ready.clear()
         for candidate_id in remaining:
             if candidate_id in scheduled:
                 continue
             candidate = subtask_map[candidate_id]
-            if candidate.assigned_model == model:
+            if (candidate.assigned_model or "unknown") == model:
                 batch_ids.append(candidate_id)
                 scheduled.add(candidate_id)
             else:
                 ready.append(candidate_id)
 
-        batches.append(ModelBatch(model=model, subtask_ids=batch_ids))
-
-        for batch_id in batch_ids:
+        # Phase 2 — process dependencies of the batch so far and check whether
+        # newly-unblocked tasks can reuse this model load (recursive lookahead).
+        newly_ready: list[str] = []
+        to_process: list[str] = list(batch_ids)
+        while to_process:
+            batch_id = to_process.pop()
             for dep_of in dependents.get(batch_id, []):
                 in_degree[dep_of] -= 1
                 if in_degree[dep_of] == 0 and dep_of not in scheduled:
-                    ready.append(dep_of)
+                    if (subtask_map[dep_of].assigned_model or "unknown") == model:
+                        batch_ids.append(dep_of)
+                        scheduled.add(dep_of)
+                        to_process.append(dep_of)
+                    else:
+                        newly_ready.append(dep_of)
+
+        for nid in newly_ready:
+            ready.append(nid)
+
+        batches.append(ModelBatch(model=model, subtask_ids=batch_ids))
 
     return batches
 
@@ -286,6 +298,103 @@ def _parallel_batches(
             scheduled.update(ids)
 
     return batches
+
+
+def describe_schedule(plan: AnalyzerPlan, schedule: ExecutionSchedule) -> str:
+    """Return a human-readable block showing the DAG, model assignments,
+    batches, and load-count comparison."""
+    lines: list[str] = []
+
+    # ── 1. Subtask table ──────────────────────────────────────────────
+    lines.append("Subtasks:")
+    lines.append(f"  {'ID':<6} {'Domain':<16} {'Model':<28} {'Deps':<20}")
+    lines.append(f"  {'-'*6} {'-'*16} {'-'*28} {'-'*20}")
+    smap = {s.id: s for s in plan.subtasks}
+    for s in plan.subtasks:
+        deps = ", ".join(s.depends_on) if s.depends_on else "—"
+        assigned = s.assigned_model or "unassigned"
+        lines.append(f"  {s.id:<6} {s.domain.value:<16} {assigned:<28} {deps:<20}")
+    lines.append("")
+
+    # ── 2. Dependency edges (DAG) ─────────────────────────────────────
+    edges = [(s.id, d) for s in plan.subtasks for d in s.depends_on]
+    if edges:
+        lines.append("Dependency edges (a → b  means  b depends on a):")
+        for src, dst in edges:
+            lines.append(f"  {src} → {dst}")
+        topo_lines = _topological_trace(plan)
+        lines.append(f"  Topological order: {' → '.join(topo_lines)}")
+    else:
+        lines.append("No dependencies — all tasks are independent.")
+    lines.append("")
+
+    # ── 3. Batches ────────────────────────────────────────────────────
+    lines.append(f"Execution strategy: [bold]{schedule.strategy.value}[/]")
+    lines.append(f"Batches ({len(schedule.batches)}):")
+    for i, batch in enumerate(schedule.batches, 1):
+        ids = ", ".join(batch.subtask_ids)
+        model_domains = []
+        for sid in batch.subtask_ids:
+            s = smap.get(sid)
+            if s:
+                model_domains.append(f"{s.domain.value}")
+        domain_str = ", ".join(model_domains)
+        lines.append(f"  Batch {i}: model={batch.model}")
+        lines.append(f"           tasks=({ids})")
+        lines.append(f"           domains=({domain_str})")
+    lines.append("")
+
+    # ── 4. Load-count comparison ────────────────────────────────────
+    actual = count_model_loads(schedule)
+    # Naive baseline: each task in topological order, worst-case
+    naive = _naive_load_count(plan)
+    saved = naive - actual
+    pct = int((saved / naive) * 100) if naive > 0 else 0
+    lines.append(f"Model load comparison:")
+    lines.append(f"  Naive (one task at a time): {naive} loads")
+    lines.append(f"  {schedule.strategy.value}:           {actual} loads")
+    lines.append(f"  Saved:                      {saved} loads ({pct}% fewer)")
+
+    return "\n".join(lines)
+
+
+def _topological_trace(plan: AnalyzerPlan) -> list[str]:
+    """Return task IDs in topological order."""
+    smap = {s.id: s for s in plan.subtasks}
+    in_deg = {s.id: len(s.depends_on) for s in plan.subtasks}
+    deps_of: dict[str, list[str]] = {s.id: [] for s in plan.subtasks}
+    for s in plan.subtasks:
+        for d in s.depends_on:
+            if d in deps_of:
+                deps_of[d].append(s.id)
+    from collections import deque
+    q = deque(sid for sid, d in in_deg.items() if d == 0)
+    result: list[str] = []
+    while q:
+        sid = q.popleft()
+        result.append(sid)
+        for dep in deps_of.get(sid, []):
+            in_deg[dep] -= 1
+            if in_deg[dep] == 0:
+                q.append(dep)
+    result.extend(sid for sid in smap if sid not in result)  # cycle fallback
+    return result
+
+
+def _naive_load_count(plan: AnalyzerPlan) -> int:
+    """Count model loads in naive sequential execution."""
+    order = _topological_trace(plan)
+    if not order:
+        return 0
+    smap = {s.id: s for s in plan.subtasks}
+    loads = 1
+    prev = smap[order[0]].assigned_model
+    for sid in order[1:]:
+        cur = smap[sid].assigned_model
+        if cur != prev:
+            loads += 1
+            prev = cur
+    return loads
 
 
 def count_model_loads(schedule: ExecutionSchedule) -> int:

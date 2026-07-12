@@ -227,12 +227,13 @@ async def test_run_benchmark(monkeypatch):
 
     monkeypatch.setattr("litellm.acompletion", mock_acompletion)
 
-    store = await run_benchmark(
+    store, details = await run_benchmark(
         models=["ollama/test-model"],
         domains=[DomainType.math],
         judge_model="ollama/test-judge",
     )
     assert len(store.entries) > 0
+    assert isinstance(details, list)
     assert store.entries[0].score > 0
     assert store.entries[0].domain == DomainType.math
     assert store.entries[0].model == "ollama/test-model"

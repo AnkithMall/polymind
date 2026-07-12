@@ -408,16 +408,32 @@ class BenchmarkResult:
     tasks_completed: int = 0
 
 
+@dataclass
+class BenchmarkTaskDetail:
+    model: str
+    domain: DomainType
+    task: BenchmarkTask
+    output: str
+    score: float
+    latency_ms: float
+    error: str | None = None
+
+
+BenchmarkReport = list[BenchmarkTaskDetail]
+
+
 async def run_benchmark(
     models: list[str],
     domains: list[DomainType] | None = None,
     judge_model: str = "ollama/llama3.2:1b",
     progress_callback: Any = None,
-) -> RankStore:
+    collect_details: bool = False,
+) -> tuple[RankStore, BenchmarkReport]:
     if domains is None:
         domains = ALL_DOMAINS
 
     entries: list[RankEntry] = []
+    details: BenchmarkReport = []
 
     total_tasks = len(models) * sum(
         len(get_tasks_for_domain(d)) for d in domains
@@ -443,16 +459,15 @@ async def run_benchmark(
             errors = 0
 
             for task_idx, task in enumerate(tasks):
-                if progress_callback:
-                    progress_callback(
-                        completed / max(total_tasks, 1),
-                        f"{model} / {domain.value} / task {task_idx + 1}/{len(tasks)}",
-                    )
-
                 logger.debug(
                     "Benchmark task %d/%d: model=%s domain=%s",
                     task_idx + 1, len(tasks), model, domain.value,
                 )
+
+                task_error: str | None = None
+                task_output = ""
+                task_score = 0.0
+                task_latency = 0.0
 
                 try:
                     start = time.monotonic()
@@ -473,15 +488,16 @@ async def run_benchmark(
                     output, in_tokens, out_tokens = await retry_with_backoff(
                         _call, max_retries=2, base_delay_s=1.0
                     )
-                    elapsed = (time.monotonic() - start) * 1000
+                    task_output = output
+                    task_latency = (time.monotonic() - start) * 1000
 
-                    score = await score_task(output, task, task.prompt, judge_model)
+                    task_score = await score_task(task_output, task, task.prompt, judge_model)
                     logger.debug(
                         "Benchmark result: model=%s domain=%s score=%.4f latency=%.0fms",
-                        model, domain.value, score, elapsed,
+                        model, domain.value, task_score, task_latency,
                     )
-                    domain_scores.append(score)
-                    total_latency += elapsed
+                    domain_scores.append(task_score)
+                    total_latency += task_latency
                     if in_tokens is not None and out_tokens is not None:
                         task_cost = calculate_cost(model, in_tokens, out_tokens)
                     else:
@@ -489,10 +505,30 @@ async def run_benchmark(
                     total_cost += task_cost
                 except Exception as e:
                     logger.error("Benchmark task failed: %s", e)
+                    task_error = str(e)
                     domain_scores.append(0.0)
                     errors += 1
 
+                if collect_details:
+                    details.append(
+                        BenchmarkTaskDetail(
+                            model=model,
+                            domain=domain,
+                            task=task,
+                            output=task_output,
+                            score=task_score,
+                            latency_ms=task_latency,
+                            error=task_error,
+                        )
+                    )
+
                 completed += 1
+
+                if progress_callback:
+                    progress_callback(
+                        completed / max(total_tasks, 1),
+                        f"{model} / {domain.value} / task {task_idx + 1}/{len(tasks)}",
+                    )
 
             if domain_scores:
                 avg_score = sum(domain_scores) / len(domain_scores)
@@ -512,7 +548,7 @@ async def run_benchmark(
                     )
                 )
 
-    return RankStore(entries=entries)
+    return RankStore(entries=entries), details
 
 
 def load_ranks(path: str | Path) -> RankStore:

@@ -89,3 +89,19 @@ def test_pipeline_result():
 def test_all_domains():
     assert len(ALL_DOMAINS) == 9
     assert DomainType.code in ALL_DOMAINS
+
+
+# ── Ranking mode helpers ─────────────────────────────────────────────
+
+def test_cost_effective_ranking():
+    from polymind.core.types import RankingMode, _rank_key
+    cheap = RankEntry(model="cheap", domain=DomainType.code, score=0.6, cost=0.0001)
+    expensive = RankEntry(model="expensive", domain=DomainType.code, score=0.9, cost=0.01)
+    assert _rank_key(cheap, RankingMode.cost_effective) > _rank_key(expensive, RankingMode.cost_effective)
+
+
+def test_cost_ranking():
+    from polymind.core.types import RankingMode, _rank_key
+    cheap = RankEntry(model="cheap", domain=DomainType.code, score=0.6, cost=0.0001)
+    expensive = RankEntry(model="expensive", domain=DomainType.code, score=0.9, cost=0.01)
+    assert _rank_key(cheap, RankingMode.cost) > _rank_key(expensive, RankingMode.cost)

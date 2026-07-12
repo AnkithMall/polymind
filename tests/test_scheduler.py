@@ -1,3 +1,5 @@
+import time
+
 from polymind.core.scheduler import (
     _assign_models,
     _model_aware_batches,
@@ -6,11 +8,14 @@ from polymind.core.scheduler import (
     _topological_batches,
     build_schedule,
     count_model_loads,
+    describe_schedule,
 )
 from polymind.core.types import (
     AnalyzerPlan,
     DomainType,
+    ExecutionSchedule,
     ExecutionStrategy,
+    ModelBatch,
     RankEntry,
     RankStore,
     Subtask,
@@ -245,8 +250,6 @@ def test_count_model_loads():
 
 
 def test_count_model_loads_same_model():
-    from polymind.core.types import ExecutionSchedule, ModelBatch
-
     schedule = ExecutionSchedule(
         strategy=ExecutionStrategy.model_aware,
         batches=[
@@ -256,3 +259,92 @@ def test_count_model_loads_same_model():
         ],
     )
     assert count_model_loads(schedule) == 1
+
+
+# ── describe_schedule() ──────────────────────────────────────────────
+
+def test_describe_schedule_contains_subtasks():
+    plan = _make_plan([("t1", DomainType.code, [])])
+    schedule = build_schedule(plan)
+    text = describe_schedule(plan, schedule)
+    assert "Subtask" in text
+    assert "t1" in text
+
+
+def test_describe_schedule_contains_batches():
+    plan = _make_plan([
+        ("t1", DomainType.code, []),
+        ("t2", DomainType.math, []),
+    ])
+    schedule = build_schedule(plan)
+    text = describe_schedule(plan, schedule)
+    assert "Batch" in text
+    assert "Model load" in text
+
+
+def test_describe_schedule_contains_load_comparison():
+    plan = _make_plan([
+        ("t1", DomainType.code, []),
+        ("t2", DomainType.math, ["t1"]),
+    ])
+    schedule = build_schedule(plan)
+    text = describe_schedule(plan, schedule)
+    assert "loads" in text
+
+
+# ── Recursive lookahead ──────────────────────────────────────────────
+
+def test_recursive_lookahead():
+    """T1(code/A) -> T3(code/A): lookahead groups T3 with T1."""
+    plan = _make_plan([
+        ("t1", DomainType.code, []),
+        ("t2", DomainType.math, []),
+        ("t3", DomainType.code, ["t1"]),
+    ])
+    store = RankStore(entries=[
+        RankEntry(model="model-a", domain=DomainType.code, score=0.9),
+        RankEntry(model="model-b", domain=DomainType.math, score=0.8),
+    ])
+    schedule = build_schedule(plan, rank_store=store, strategy=ExecutionStrategy.model_aware)
+    loads = count_model_loads(schedule)
+    assert loads <= 2, f"Expected <=2 loads, got {loads}"
+
+
+# ── Performance (latency guards) ─────────────────────────────────────
+
+def test_build_schedule_latency():
+    """build_schedule should complete in under 50ms average."""
+    plan = _make_plan([
+        (f"t{i}", DomainType.code if i % 2 == 0 else DomainType.math, [f"t{i-2}"] if i > 0 and i % 3 == 0 else [])
+        for i in range(10)
+    ])
+    start = time.monotonic()
+    for _ in range(100):
+        build_schedule(plan, strategy=ExecutionStrategy.model_aware)
+    elapsed = (time.monotonic() - start) / 100
+    assert elapsed < 0.05, f"avg {elapsed*1000:.1f}ms (limit 50ms)"
+
+
+def test_count_model_loads_latency():
+    """count_model_loads should average under 1ms."""
+    batches = [ModelBatch(model="a", subtask_ids=[f"t{i}"]) for i in range(100)]
+    schedule = ExecutionSchedule(strategy=ExecutionStrategy.model_aware, batches=batches)
+    start = time.monotonic()
+    for _ in range(1000):
+        count_model_loads(schedule)
+    elapsed = (time.monotonic() - start) / 1000
+    assert elapsed < 0.001, f"avg {elapsed*1000:.3f}ms"
+
+
+def test_describe_schedule_latency():
+    """describe_schedule for 50 tasks should average under 20ms."""
+    plan = _make_plan([
+        (f"t{i}", DomainType.code if i % 2 == 0 else DomainType.math, [f"t{i-2}"] if i > 0 and i % 5 == 0 else [])
+        for i in range(50)
+    ])
+    schedule = build_schedule(plan)
+    start = time.monotonic()
+    for _ in range(100):
+        describe_schedule(plan, schedule)
+    elapsed = (time.monotonic() - start) / 100
+    assert elapsed < 0.02, f"avg {elapsed*1000:.1f}ms (limit 20ms)"

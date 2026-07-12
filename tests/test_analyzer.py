@@ -75,6 +75,15 @@ def test_parse_plan_invalid_domain_falls_back_to_general():
     assert plan.subtasks[0].domain == DomainType.general
 
 
+@pytest.mark.asyncio
+async def test_analyze_prompt_fallback_on_error():
+    """Unreachable router_model returns a single general-task fallback plan."""
+    from polymind.core.analyzer import analyze_prompt
+    plan = await analyze_prompt("Hello world", router_model="ollama/nonexistent-model-xyz")
+    assert len(plan.subtasks) >= 1
+    assert plan.original_prompt == "Hello world"
+
+
 def test_single_task_fallback():
     plan = _single_task_fallback("hello world")
     assert isinstance(plan, AnalyzerPlan)

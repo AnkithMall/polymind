@@ -277,11 +277,16 @@ function showPlan(plan) {
   planTable.innerHTML = html;
 }
 
-function showSchedule(schedule) {
+function showSchedule(data) {
   scheduleSection.classList.remove('hidden');
+  const batches = data.batches || data;
   let html = '';
-  for (const b of schedule) {
+  for (const b of batches) {
     html += `<tr><td style="color:var(--accent)">${esc(b.model)}</td><td>${b.subtask_ids.join(', ')}</td></tr>`;
+  }
+  // Show visual description below the table
+  if (data.visual) {
+    html += `<tr><td colspan="2"><pre style="font-size:12px;line-height:1.4;margin-top:8px">${esc(data.visual)}</pre></td></tr>`;
   }
   scheduleTable.innerHTML = html;
 }
@@ -354,7 +359,8 @@ function handleEvent(event, data) {
     case 'schedule': {
       const sched = JSON.parse(data);
       showSchedule(sched);
-      logLine(`Schedule: ${sched.length} batch(es)`, 'plan');
+      const batches = sched.batches || sched;
+      logLine(`Schedule: ${batches.length} batch(es)`, 'plan');
       break;
     }
     case 'subtask_complete': {

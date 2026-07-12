@@ -68,4 +68,4 @@ def test_ask_no_config():
     with patch("polymind.cli.main.CONFIG_PATH", Path("/nonexistent/config.yaml")):
         result = runner.invoke(app, ["ask", "hello"])
         assert result.exit_code == 1
-        assert "No config found" in result.output
+        assert "Setup Required" in result.output or "No config" in result.output
