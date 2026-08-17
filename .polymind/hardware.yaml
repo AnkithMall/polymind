@@ -1,0 +1,66 @@
+version: 1
+system:
+  operating_system: Linux
+  kernel: 7.1.8-arch1-3
+  architecture: x86_64
+cpu:
+  model: Intel(R) Core(TM) i7-9850H CPU @ 2.60GHz
+  architecture: x86_64
+  physical_cores: 6
+  logical_cores: 12
+memory:
+  total_bytes: 33367580672
+gpus:
+- id: 0
+  vendor: Intel
+  model: Intel Corporation CoffeeLake-H GT2 [UHD Graphics 630]
+  pci:
+    address: '00:02.0'
+    device_id: 3e9b
+  memory:
+    total_bytes: 0
+    available_bytes: null
+    used_bytes: null
+    shared: true
+  driver:
+    version: null
+  compute:
+    llama_cpp_usable: false
+    backend: null
+  selection:
+    enabled: false
+    priority: 0
+    reason: No supported llama.cpp backend detected
+  llama_cpp:
+    device: null
+- id: 1
+  vendor: NVIDIA
+  model: Quadro T1000
+  pci:
+    address: '01:00.0'
+    device_id: 1fb9
+  memory:
+    total_bytes: 4294967296
+    available_bytes: 3748659200
+    used_bytes: 157286400
+    shared: false
+  driver:
+    version: 610.57.04
+  compute:
+    llama_cpp_usable: true
+    backend: cuda
+  selection:
+    enabled: true
+    priority: 100
+    reason: null
+  llama_cpp:
+    device: 0
+llama_cpp:
+  available: true
+  backends:
+  - cuda
+  usable_gpus:
+  - 1
+  selected_gpus:
+  - 1
+  multi_gpu_available: false
