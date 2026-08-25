@@ -9,7 +9,7 @@ cpu:
   physical_cores: 6
   logical_cores: 12
 memory:
-  total_bytes: 33367580672
+  total_bytes: 33367572480
 gpus:
 - id: 0
   vendor: Intel
@@ -41,8 +41,8 @@ gpus:
     device_id: 1fb9
   memory:
     total_bytes: 4294967296
-    available_bytes: 3748659200
-    used_bytes: 157286400
+    available_bytes: 3784310784
+    used_bytes: 120586240
     shared: false
   driver:
     version: 610.57.04
