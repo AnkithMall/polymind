@@ -108,15 +108,38 @@ def _detect_domain(prompt: str) -> str:
     if any(k in lower for k in knowledge_keywords):
         return "knowledge"
 
-    math_keywords = ["calculate", "math", "equation", "solve", "compute", "sum", "average", "integral", "derivative"]
+    math_keywords = [
+        "calculate",
+        "math",
+        "equation",
+        "solve",
+        "compute",
+        "sum",
+        "average",
+        "integral",
+        "derivative",
+    ]
     if any(k in lower for k in math_keywords):
         return "mathematics"
 
-    reason_keywords = ["why does", "explain why", "analyze why", "reasoning", "logic puzzle", "syllogism"]
+    reason_keywords = [
+        "why does",
+        "explain why",
+        "analyze why",
+        "reasoning",
+        "logic puzzle",
+        "syllogism",
+    ]
     if any(k in lower for k in reason_keywords):
         return "reasoning"
 
-    write_keywords = ["write a story", "write a poem", "creative writing", "draft an essay", "compose"]
+    write_keywords = [
+        "write a story",
+        "write a poem",
+        "creative writing",
+        "draft an essay",
+        "compose",
+    ]
     if any(k in lower for k in write_keywords):
         return "writing"
 
@@ -125,11 +148,33 @@ def _detect_domain(prompt: str) -> str:
         return "safety"
 
     code_keywords = [
-        "code", "function", "class", "debug", "python", "javascript",
-        "program", "implement", "api", "endpoint", "database", "sql",
-        "algorithm", "refactor", "test", "unit test", "integration test",
-        "git", "docker", "deploy", "build a", "create a", "write a function",
-        "write code", "fix the bug", "error in", "stack trace",
+        "code",
+        "function",
+        "class",
+        "debug",
+        "python",
+        "javascript",
+        "program",
+        "implement",
+        "api",
+        "endpoint",
+        "database",
+        "sql",
+        "algorithm",
+        "refactor",
+        "test",
+        "unit test",
+        "integration test",
+        "git",
+        "docker",
+        "deploy",
+        "build a",
+        "create a",
+        "write a function",
+        "write code",
+        "fix the bug",
+        "error in",
+        "stack trace",
     ]
     if any(k in lower for k in code_keywords):
         return "coding"

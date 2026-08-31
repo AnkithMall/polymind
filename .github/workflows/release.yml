@@ -18,14 +18,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
       - name: Install dependencies
-        run: uv sync --all-groups
+        run: uv sync
 
       - name: Lint
         run: uv run ruff check src/ tests/
@@ -52,6 +64,14 @@ jobs:
       - name: Build package
         run: uv build
 
+      - name: Verify artifacts
+        run: |
+          echo "=== Built artifacts ==="
+          ls -lh dist/
+          echo ""
+          echo "=== Wheel contents ==="
+          unzip -l dist/*.whl | head -30
+
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -66,6 +86,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -96,6 +118,10 @@ jobs:
           name: dist
           path: dist/
 
+      - name: List release artifacts
+        if: steps.tag_check.outputs.exists == 'false'
+        run: ls -lh dist/
+
       - name: Create GitHub Release
         if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
@@ -105,7 +131,7 @@ jobs:
           body: |
             ## polymind v${{ steps.version.outputs.version }}
 
-            ### Install
+            ### Install from PyPI
             ```bash
             pip install polymind==${{ steps.version.outputs.version }}
             ```
@@ -113,6 +139,13 @@ jobs:
             Or with uv:
             ```bash
             uv add polymind==${{ steps.version.outputs.version }}
+            ```
+
+            ### Install from source
+            ```bash
+            git clone https://github.com/AnkithMall/polymind.git
+            cd polymind
+            uv sync
             ```
           files: dist/*
           draft: false
@@ -123,3 +156,24 @@ jobs:
       - name: Skip release (tag exists)
         if: steps.tag_check.outputs.exists == 'true'
         run: echo "Tag v${{ steps.version.outputs.version }} already exists. Skipping release."
+
+  publish:
+    needs: release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/v2'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}

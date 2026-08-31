@@ -58,7 +58,9 @@ def list_domains() -> None:
 
 @app.command("show")
 def show_domain(
-    domain_id: str = typer.Argument(..., help="Domain ID to display, e.g. math, coding, or a custom ID."),
+    domain_id: str = typer.Argument(
+        ..., help="Domain ID to display, e.g. math, coding, or a custom ID."
+    ),
 ) -> None:
     """Show detailed information about a domain.
 
@@ -101,7 +103,9 @@ def show_domain(
 
 @app.command("create")
 def create_domain(
-    domain_id: str = typer.Argument(..., help="Unique ID for the new domain (letters, numbers, hyphens, underscores)."),
+    domain_id: str = typer.Argument(
+        ..., help="Unique ID for the new domain (letters, numbers, hyphens, underscores)."
+    ),
     name: str = typer.Option(..., prompt=True, help="Human-readable display name for the domain."),
     description: str = typer.Option("", prompt=True, help="Description of what this domain tests."),
 ) -> None:
@@ -147,8 +151,12 @@ def create_domain(
 
 @app.command("delete")
 def delete_domain(
-    domain_id: str = typer.Argument(..., help="Custom domain ID to delete (cannot delete predefined domains)."),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt and delete immediately."),
+    domain_id: str = typer.Argument(
+        ..., help="Custom domain ID to delete (cannot delete predefined domains)."
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt and delete immediately."
+    ),
 ) -> None:
     """Delete a custom domain. Cannot delete predefined domains.
 
@@ -186,7 +194,9 @@ def delete_domain(
 @app.command("export")
 def export_domain(
     domain_id: str = typer.Argument(..., help="Domain ID to export to a YAML file."),
-    output: str = typer.Option("", "--output", "-o", help="Output file path. Defaults to <domain_id>.yaml."),
+    output: str = typer.Option(
+        "", "--output", "-o", help="Output file path. Defaults to <domain_id>.yaml."
+    ),
 ) -> None:
     """Export a domain to a YAML file.
 

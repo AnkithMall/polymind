@@ -14,7 +14,9 @@ app = typer.Typer()
 
 @app.command("list")
 def list_suites(
-    domain_id: str = typer.Argument("", help="Domain ID to filter suites by. Lists all domains if empty."),
+    domain_id: str = typer.Argument(
+        "", help="Domain ID to filter suites by. Lists all domains if empty."
+    ),
 ) -> None:
     """List test suites, optionally filtered by domain.
 
@@ -57,7 +59,10 @@ def _print_suites(suites: list[TestSuite]) -> None:
 def show_suite(
     suite_id: str = typer.Argument(..., help="Suite ID to display, e.g. math_arithmetic."),
     domain_id: str = typer.Option(
-        "", "--domain", "-d", help="Domain ID to search in. Auto-detected from suite ID if not provided."
+        "",
+        "--domain",
+        "-d",
+        help="Domain ID to search in. Auto-detected from suite ID if not provided.",
     ),
 ) -> None:
     """Show detailed information about a test suite.
@@ -96,7 +101,9 @@ def show_suite(
 @app.command("create")
 def create_suite(
     domain_id: str = typer.Argument(..., help="Custom domain ID to add the suite to."),
-    suite_id: str = typer.Option(..., prompt=True, help="Unique suite ID within the domain (letters, numbers, underscores)."),
+    suite_id: str = typer.Option(
+        ..., prompt=True, help="Unique suite ID within the domain (letters, numbers, underscores)."
+    ),
     name: str = typer.Option(..., prompt=True, help="Human-readable display name for the suite."),
     description: str = typer.Option("", prompt=True, help="Description of what this suite tests."),
     difficulty: str = typer.Option(
@@ -158,9 +165,17 @@ def add_question(
     suite_id: str = typer.Argument(..., help="Suite ID to add the question to."),
     question_id: str = typer.Option(..., prompt=True, help="Unique question ID within the suite."),
     prompt: str = typer.Option(..., prompt=True, help="The question text to ask the model."),
-    expected: str = typer.Option(..., prompt=True, help="Expected answer or reference answer for scoring."),
-    evaluation: str = typer.Option("hybrid", prompt=True, help="Evaluation method: exact_match, keyword_match, code_execution, llm_judge, or hybrid."),
-    keywords: str = typer.Option("", prompt=False, help="Comma-separated keywords for keyword_match evaluation."),
+    expected: str = typer.Option(
+        ..., prompt=True, help="Expected answer or reference answer for scoring."
+    ),
+    evaluation: str = typer.Option(
+        "hybrid",
+        prompt=True,
+        help="Evaluation method: exact_match, keyword_match, code_execution, llm_judge, or hybrid.",
+    ),
+    keywords: str = typer.Option(
+        "", prompt=False, help="Comma-separated keywords for keyword_match evaluation."
+    ),
 ) -> None:
     """Add a question to a test suite.
 
@@ -220,7 +235,9 @@ def remove_question(
     domain_id: str = typer.Argument(..., help="Domain ID containing the suite."),
     suite_id: str = typer.Argument(..., help="Suite ID containing the question."),
     question_id: str = typer.Argument(..., help="Question ID to remove from the suite."),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt and remove immediately."),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt and remove immediately."
+    ),
 ) -> None:
     """Remove a question from a test suite.
 
@@ -274,7 +291,9 @@ def remove_question(
 def delete_suite(
     domain_id: str = typer.Argument(..., help="Custom domain ID containing the suite."),
     suite_id: str = typer.Argument(..., help="Suite ID to delete (with all its questions)."),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt and delete immediately."),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt and delete immediately."
+    ),
 ) -> None:
     """Delete a test suite from a domain.
 

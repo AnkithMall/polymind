@@ -26,9 +26,18 @@ app = typer.Typer()
 
 @app.command("compute")
 def compute_confidence(
-    model_id: str = typer.Option("", "--model", "-m", help="Model ID (number) to score. Scores all installed models if empty."),
-    domain_id: str = typer.Option("", "--domain", "-d", help="Domain ID to score against. Uses all domains if empty."),
-    output_json: bool = typer.Option(False, "--json", help="Output full result as JSON instead of formatted text."),
+    model_id: str = typer.Option(
+        "",
+        "--model",
+        "-m",
+        help="Model ID (number) to score. Scores all installed models if empty.",
+    ),
+    domain_id: str = typer.Option(
+        "", "--domain", "-d", help="Domain ID to score against. Uses all domains if empty."
+    ),
+    output_json: bool = typer.Option(
+        False, "--json", help="Output full result as JSON instead of formatted text."
+    ),
 ) -> None:
     """Compute confidence scores for models.
 
@@ -185,8 +194,12 @@ def compute_confidence(
 @app.command("show")
 def show_confidence(
     model_id: str = typer.Option("", "--model", "-m", help="Model ID (number) to show scores for."),
-    domain_id: str = typer.Option("", "--domain", "-d", help="Domain ID to show detailed breakdown for."),
-    output_json: bool = typer.Option(False, "--json", help="Output full result as JSON instead of formatted text."),
+    domain_id: str = typer.Option(
+        "", "--domain", "-d", help="Domain ID to show detailed breakdown for."
+    ),
+    output_json: bool = typer.Option(
+        False, "--json", help="Output full result as JSON instead of formatted text."
+    ),
 ) -> None:
     """Show confidence scores.
 
@@ -293,8 +306,12 @@ def list_domains() -> None:
 
 @app.command("reset")
 def reset_scores(
-    model_id: str = typer.Option("", "--model", "-m", help="Model ID (number) to reset scores for. Resets all if empty."),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt and reset immediately."),
+    model_id: str = typer.Option(
+        "", "--model", "-m", help="Model ID (number) to reset scores for. Resets all if empty."
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Skip confirmation prompt and reset immediately."
+    ),
 ) -> None:
     """Reset confidence scores.
 

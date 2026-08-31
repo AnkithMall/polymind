@@ -15,10 +15,10 @@ from polymind.core.paths import artifact_dir
 _DEFAULT_LOG_CONFIG = {
     "enabled": True,
     "max_bytes": 5 * 1024 * 1024,  # 5 MB per log file
-    "backup_count": 3,              # Keep 3 rotated files
-    "max_age_days": 7,              # Delete logs older than 7 days
-    "max_total_files": 10,          # Max total log files in directory
-    "max_total_size_mb": 50,        # Max total size of all logs
+    "backup_count": 3,  # Keep 3 rotated files
+    "max_age_days": 7,  # Delete logs older than 7 days
+    "max_total_files": 10,  # Max total log files in directory
+    "max_total_size_mb": 50,  # Max total size of all logs
 }
 
 

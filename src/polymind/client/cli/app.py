@@ -26,7 +26,9 @@ app = typer.Typer(
 app.add_typer(model.app, name="model", help="Search, download, and manage GGUF models.")
 app.add_typer(hardware.app, name="hardware", help="Scan and display system hardware.")
 app.add_typer(runtime.app, name="runtime", help="Benchmark and optimize model runtime settings.")
-app.add_typer(pipeline.app, name="pipeline", help="Decompose prompts and run multi-model pipelines.")
+app.add_typer(
+    pipeline.app, name="pipeline", help="Decompose prompts and run multi-model pipelines."
+)
 app.add_typer(confidence.app, name="confidence", help="Compute and view model confidence scores.")
 app.add_typer(domain.app, name="domain", help="Manage scoring domains (predefined + custom).")
 app.add_typer(suite.app, name="suite", help="Manage test suites within domains.")

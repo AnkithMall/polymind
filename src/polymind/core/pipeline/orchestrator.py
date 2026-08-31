@@ -100,7 +100,10 @@ class Pipeline:
             self._unload_models()
 
     def _run_inner(
-        self, prompt: str, result: PipelineResult, start_time: float,
+        self,
+        prompt: str,
+        result: PipelineResult,
+        start_time: float,
     ) -> PipelineResult:
         """Inner pipeline execution (can be cancelled)."""
         self._warnings = []
@@ -115,7 +118,10 @@ class Pipeline:
         self._emit(
             "analyze",
             Task(
-                id="analyze", prompt=prompt, domain="", task_type=TaskType.CUSTOM,
+                id="analyze",
+                prompt=prompt,
+                domain="",
+                task_type=TaskType.CUSTOM,
                 metadata={
                     "is_simple": str(is_simple).lower(),
                     "word_count": str(word_count),
@@ -127,8 +133,11 @@ class Pipeline:
             domain = _detect_domain(prompt)
             tasks = [
                 Task(
-                    id="task_1", prompt=prompt, domain=domain,
-                    task_type=TaskType.GENERATE, model_role=ModelRole.GENERATOR,
+                    id="task_1",
+                    prompt=prompt,
+                    domain=domain,
+                    task_type=TaskType.GENERATE,
+                    model_role=ModelRole.GENERATOR,
                 )
             ]
         else:
@@ -143,7 +152,10 @@ class Pipeline:
             self._emit(
                 "decompose_done",
                 Task(
-                    id="decompose", prompt=prompt, domain="", task_type=TaskType.DECOMPOSE,
+                    id="decompose",
+                    prompt=prompt,
+                    domain="",
+                    task_type=TaskType.DECOMPOSE,
                     metadata={"tasks": [t.to_dict() for t in tasks]},
                 ),
             )
@@ -183,7 +195,10 @@ class Pipeline:
         self._emit(
             "assign_done",
             Task(
-                id="assign", prompt="", domain="", task_type=TaskType.GENERATE,
+                id="assign",
+                prompt="",
+                domain="",
+                task_type=TaskType.GENERATE,
                 metadata={"assignments": assign_metadata},
             ),
         )
@@ -197,7 +212,10 @@ class Pipeline:
         self._emit(
             "schedule",
             Task(
-                id="schedule", prompt="", domain="", task_type=TaskType.CUSTOM,
+                id="schedule",
+                prompt="",
+                domain="",
+                task_type=TaskType.CUSTOM,
                 metadata={
                     "groups": [g.to_dict() for g in plan.groups],
                     "model_loads": str(plan.estimated_model_loads),
@@ -306,10 +324,20 @@ class Pipeline:
                 return False
 
         multi_step = [
-            "step 1", "step 2", "first,", "then,", "also,",
-            "and then", "after that", "finally,",
-            "write a", "create a", "build a", "implement",
-            "design a", "make a",
+            "step 1",
+            "step 2",
+            "first,",
+            "then,",
+            "also,",
+            "and then",
+            "after that",
+            "finally,",
+            "write a",
+            "create a",
+            "build a",
+            "implement",
+            "design a",
+            "make a",
         ]
         prompt_lower = prompt.lower()
         if any(m in prompt_lower for m in multi_step):
@@ -325,8 +353,11 @@ class Pipeline:
     def _decompose(self, prompt: str) -> list[Task]:
         """Decompose prompt into tasks."""
         dummy_task = Task(
-            id="decompose", prompt=prompt, domain="",
-            task_type=TaskType.DECOMPOSE, model_role=ModelRole.DECOMPOSER,
+            id="decompose",
+            prompt=prompt,
+            domain="",
+            task_type=TaskType.DECOMPOSE,
+            model_role=ModelRole.DECOMPOSER,
         )
         assignment = select_model_for_task(dummy_task, self.config, self.registry)
 
@@ -349,7 +380,8 @@ class Pipeline:
         """Create a single task as fallback."""
         return [
             Task(
-                id="task_1", prompt=prompt,
+                id="task_1",
+                prompt=prompt,
                 domain=_detect_domain(prompt),
                 task_type=TaskType.GENERATE,
                 model_role=ModelRole.GENERATOR,
@@ -408,8 +440,11 @@ class Pipeline:
             return completed[0].result
 
         dummy_task = Task(
-            id="regenerate", prompt=prompt, domain="",
-            task_type=TaskType.REGENERATE, model_role=ModelRole.REGENERATOR,
+            id="regenerate",
+            prompt=prompt,
+            domain="",
+            task_type=TaskType.REGENERATE,
+            model_role=ModelRole.REGENERATOR,
         )
         assignment = select_model_for_task(dummy_task, self.config, self.registry)
 
@@ -456,7 +491,10 @@ class Pipeline:
         self._emit(
             "model_load",
             Task(
-                id="load", prompt="", domain="", task_type=TaskType.CUSTOM,
+                id="load",
+                prompt="",
+                domain="",
+                task_type=TaskType.CUSTOM,
                 metadata={
                     "model_id": model_id,
                     "model_file": model.filename,
@@ -482,7 +520,10 @@ class Pipeline:
             self._emit(
                 "model_loaded",
                 Task(
-                    id="load", prompt="", domain="", task_type=TaskType.CUSTOM,
+                    id="load",
+                    prompt="",
+                    domain="",
+                    task_type=TaskType.CUSTOM,
                     metadata={"model_id": model_id},
                 ),
             )
@@ -493,7 +534,10 @@ class Pipeline:
             self._emit(
                 "model_load_failed",
                 Task(
-                    id="load", prompt="", domain="", task_type=TaskType.CUSTOM,
+                    id="load",
+                    prompt="",
+                    domain="",
+                    task_type=TaskType.CUSTOM,
                     metadata={"model_id": model_id, "reason": str(e)},
                 ),
             )
@@ -575,7 +619,10 @@ class Pipeline:
         self._emit(
             "artifact_check",
             Task(
-                id="artifacts", prompt="", domain="", task_type=TaskType.CUSTOM,
+                id="artifacts",
+                prompt="",
+                domain="",
+                task_type=TaskType.CUSTOM,
                 metadata=artifacts,
             ),
         )

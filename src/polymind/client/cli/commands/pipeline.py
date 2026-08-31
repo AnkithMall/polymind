@@ -135,9 +135,7 @@ def _verbose_progress(event: str, task, start_time: float = 0.0) -> None:
     elif event == "task_start":
         console.print()
         console.print(
-            f"  [bold yellow]▶ {task.id}[/] "
-            f"[dim]{task.domain}[/] "
-            f"[cyan]{task.prompt[:70]}[/]"
+            f"  [bold yellow]▶ {task.id}[/] [dim]{task.domain}[/] [cyan]{task.prompt[:70]}[/]"
         )
 
     elif event == "task_done":
@@ -147,10 +145,7 @@ def _verbose_progress(event: str, task, start_time: float = 0.0) -> None:
 
         if task.status == TaskStatus.COMPLETED:
             timing_str = f" ({elapsed}s, {tokens}tok, {speed} tok/s)" if elapsed else ""
-            console.print(
-                f"    [green]✓ {task.id}[/] "
-                f"[dim]score={task.score:.0%}[/]{timing_str}"
-            )
+            console.print(f"    [green]✓ {task.id}[/] [dim]score={task.score:.0%}[/]{timing_str}")
         elif task.status == TaskStatus.FAILED:
             console.print(f"    [red]✗ {task.id}[/] {task.error}")
 

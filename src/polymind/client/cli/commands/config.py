@@ -420,7 +420,9 @@ def edit_config(
 
 @app.command("logging")
 def logging_show(
-    raw: bool = typer.Option(False, "--raw", "-r", help="Show raw YAML of the logging configuration."),
+    raw: bool = typer.Option(
+        False, "--raw", "-r", help="Show raw YAML of the logging configuration."
+    ),
 ) -> None:
     """Show and manage pipeline logging configuration.
 
@@ -526,7 +528,9 @@ def logging_set(
 
 @app.command("pipeline")
 def pipeline_show(
-    raw: bool = typer.Option(False, "--raw", "-r", help="Show raw YAML of the pipeline configuration."),
+    raw: bool = typer.Option(
+        False, "--raw", "-r", help="Show raw YAML of the pipeline configuration."
+    ),
 ) -> None:
     """Show pipeline configuration from polymind.yaml.
 

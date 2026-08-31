@@ -258,12 +258,16 @@ def adaptive_benchmark(
     max_layers_by_vram = available_vram // layer_size if layer_size > 0 else 0
 
     # Thread candidates
-    thread_candidates = sorted(set([
-        2,
-        max(1, physical_cores // 2),
-        max(1, physical_cores - 1),
-        physical_cores,
-    ]))
+    thread_candidates = sorted(
+        set(
+            [
+                2,
+                max(1, physical_cores // 2),
+                max(1, physical_cores - 1),
+                physical_cores,
+            ]
+        )
+    )
 
     # Context candidates based on model size
     if model_size_bytes > 8_000_000_000:
@@ -273,7 +277,9 @@ def adaptive_benchmark(
     else:
         context_candidates = [2048, 4096, 8192]
 
-    best_config = RuntimeConfig(model_id="bench", gpu_layers=0, threads=physical_cores, context_size=2048, batch_size=256)
+    best_config = RuntimeConfig(
+        model_id="bench", gpu_layers=0, threads=physical_cores, context_size=2048, batch_size=256
+    )
     best_summary: BenchmarkSummary | None = None
     best_speed = 0.0
     total_tests = 0
@@ -306,8 +312,11 @@ def adaptive_benchmark(
     # Phase 1: Baseline — CPU only
     # ═══════════════════════════════════════════════════════════
     baseline_config = RuntimeConfig(
-        model_id="bench", gpu_layers=0,
-        threads=physical_cores, context_size=2048, batch_size=256,
+        model_id="bench",
+        gpu_layers=0,
+        threads=physical_cores,
+        context_size=2048,
+        batch_size=256,
     )
     baseline = _test(baseline_config, "baseline", 1, 1)
     _update_best(baseline)
@@ -316,8 +325,11 @@ def adaptive_benchmark(
         # Can't even load on CPU — try smaller context
         for ctx in [1024, 512]:
             fallback = RuntimeConfig(
-                model_id="bench", gpu_layers=0,
-                threads=physical_cores, context_size=ctx, batch_size=128,
+                model_id="bench",
+                gpu_layers=0,
+                threads=physical_cores,
+                context_size=ctx,
+                batch_size=128,
             )
             result = _test(fallback, "baseline", 1, 1)
             _update_best(result)
@@ -338,13 +350,17 @@ def adaptive_benchmark(
         working_gpu = 0  # highest that worked
 
         # Also test a few points to bracket the range
-        test_points = sorted(set([
-            0,
-            max_layers_by_vram // 4,
-            max_layers_by_vram // 2,
-            max_layers_by_vram,
-            num_layers,  # full offload attempt
-        ]))
+        test_points = sorted(
+            set(
+                [
+                    0,
+                    max_layers_by_vram // 4,
+                    max_layers_by_vram // 2,
+                    max_layers_by_vram,
+                    num_layers,  # full offload attempt
+                ]
+            )
+        )
 
         phase2_total = len(test_points) + 6  # points + binary search steps
         phase2_step = 0
@@ -352,8 +368,11 @@ def adaptive_benchmark(
         for point in test_points:
             phase2_step += 1
             config = RuntimeConfig(
-                model_id="bench", gpu_layers=point,
-                threads=physical_cores, context_size=2048, batch_size=256,
+                model_id="bench",
+                gpu_layers=point,
+                threads=physical_cores,
+                context_size=2048,
+                batch_size=256,
             )
             result = _test(config, "gpu-search", phase2_step, phase2_total)
             if result.success:
@@ -371,8 +390,11 @@ def adaptive_benchmark(
 
             phase2_step += 1
             config = RuntimeConfig(
-                model_id="bench", gpu_layers=mid,
-                threads=physical_cores, context_size=2048, batch_size=256,
+                model_id="bench",
+                gpu_layers=mid,
+                threads=physical_cores,
+                context_size=2048,
+                batch_size=256,
             )
             result = _test(config, "gpu-search", phase2_step, phase2_total)
 
@@ -389,8 +411,11 @@ def adaptive_benchmark(
             if candidate <= max_layers_by_vram:
                 phase2_step += 1
                 config = RuntimeConfig(
-                    model_id="bench", gpu_layers=candidate,
-                    threads=physical_cores, context_size=2048, batch_size=256,
+                    model_id="bench",
+                    gpu_layers=candidate,
+                    threads=physical_cores,
+                    context_size=2048,
+                    batch_size=256,
                 )
                 result = _test(config, "gpu-search", phase2_step, phase2_total)
                 if result.success:
@@ -407,8 +432,11 @@ def adaptive_benchmark(
     phase3_total = len(thread_candidates)
     for i, threads in enumerate(thread_candidates, 1):
         config = RuntimeConfig(
-            model_id="bench", gpu_layers=best_gpu_layers,
-            threads=threads, context_size=2048, batch_size=256,
+            model_id="bench",
+            gpu_layers=best_gpu_layers,
+            threads=threads,
+            context_size=2048,
+            batch_size=256,
         )
         result = _test(config, "threads", i, phase3_total)
         _update_best(result)
@@ -425,8 +453,11 @@ def adaptive_benchmark(
 
     for i, (ctx, batch) in enumerate(phase4_combos, 1):
         config = RuntimeConfig(
-            model_id="bench", gpu_layers=best_gpu_layers,
-            threads=best_threads, context_size=ctx, batch_size=batch,
+            model_id="bench",
+            gpu_layers=best_gpu_layers,
+            threads=best_threads,
+            context_size=ctx,
+            batch_size=batch,
         )
         result = _test(config, "tuning", i, phase4_total)
         _update_best(result)

@@ -329,13 +329,23 @@ class TestPipelineLogging:
         # Simulate events
         writer.log_event(
             "artifact_check",
-            Task(id="a", prompt="", domain="", task_type=TaskType.CUSTOM,
-                 metadata={"registry.yaml": "1 model", "hardware.yaml": "missing"}),
+            Task(
+                id="a",
+                prompt="",
+                domain="",
+                task_type=TaskType.CUSTOM,
+                metadata={"registry.yaml": "1 model", "hardware.yaml": "missing"},
+            ),
         )
         writer.log_event(
             "analyze",
-            Task(id="a", prompt="hi", domain="", task_type=TaskType.CUSTOM,
-                 metadata={"is_simple": "true", "word_count": "1"}),
+            Task(
+                id="a",
+                prompt="hi",
+                domain="",
+                task_type=TaskType.CUSTOM,
+                metadata={"is_simple": "true", "word_count": "1"},
+            ),
         )
         writer.log_event(
             "task_start",
