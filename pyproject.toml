@@ -1,5 +1,5 @@
 [project]
-name = "polymind"
+name = "polymind-cli"
 version = "0.1.0"
 description = "Hardware-aware local LLM toolkit with auto-optimization, domain scoring, and multi-model pipelines"
 readme = "README.md"
