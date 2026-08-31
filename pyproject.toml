@@ -1,7 +1,7 @@
 [project]
 name = "polymind"
 version = "0.1.0"
-description = "Add your description here"
+description = "Hardware-aware local LLM toolkit with auto-optimization, domain scoring, and multi-model pipelines"
 readme = "README.md"
 authors = [
     { name = "Ankith Mall", email = "ankithmall1729@gmail.com" }
@@ -14,7 +14,15 @@ dependencies = [
     "pyaml>=26.7.0",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
+    "textual>=8.2.8",
     "typer>=0.27.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
 ]
 
 [project.scripts]
@@ -23,3 +31,28 @@ polymind = "polymind.client.cli.app:main"
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "network: marks tests that require network access",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B"]
+ignore = ["E501", "B904", "B008"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.5",
+]

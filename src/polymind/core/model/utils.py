@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 _SIZE_UNITS = {
     "B": 1,
@@ -12,6 +12,7 @@ _SIZE_UNITS = {
     "GIB": 1024**3,
     "TIB": 1024**4,
 }
+
 
 def file_size_bytes(path: Path) -> int:
     return path.stat().st_size
@@ -46,10 +47,7 @@ def parse_size(value: str) -> int:
     )
 
     if not match:
-        raise ValueError(
-            f"Invalid size: {value}. "
-            "Examples: 2GiB, 3GB, 500MiB"
-        )
+        raise ValueError(f"Invalid size: {value}. Examples: 2GiB, 3GB, 500MiB")
 
     number = float(match.group(1))
     unit = match.group(2)
@@ -57,8 +55,6 @@ def parse_size(value: str) -> int:
     multiplier = _SIZE_UNITS.get(unit)
 
     if multiplier is None:
-        raise ValueError(
-            f"Unknown size unit: {unit}"
-        )
+        raise ValueError(f"Unknown size unit: {unit}")
 
     return int(number * multiplier)

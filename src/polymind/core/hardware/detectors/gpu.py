@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from polymind.core.hardware.models import (
     GPUComputeInfo,
-    GPUMemoryInfo,
     GPUInfo,
+    GPUMemoryInfo,
     GPUSelection,
     LlamaCppGPUInfo,
 )
@@ -280,17 +280,13 @@ def detect_gpus() -> list[GPUInfo]:
     pci_gpus = _detect_pci_gpus()
     nvidia_gpus = _detect_nvidia_gpus()
 
-    nvidia_by_index = {
-        gpu.index: gpu
-        for gpu in nvidia_gpus
-    }
+    nvidia_by_index = {gpu.index: gpu for gpu in nvidia_gpus}
 
     result: list[GPUInfo] = []
 
     gpu_id = 0
 
     for pci_gpu in pci_gpus:
-
         nvidia_gpu = None
 
         if pci_gpu.vendor == "NVIDIA":
@@ -298,9 +294,7 @@ def detect_gpus() -> list[GPUInfo]:
             #
             # For now, match NVIDIA GPUs in enumeration order.
             nvidia_position = sum(
-                1
-                for gpu in pci_gpus[:pci_gpus.index(pci_gpu)]
-                if gpu.vendor == "NVIDIA"
+                1 for gpu in pci_gpus[: pci_gpus.index(pci_gpu)] if gpu.vendor == "NVIDIA"
             )
 
             nvidia_gpu = nvidia_by_index.get(nvidia_position)

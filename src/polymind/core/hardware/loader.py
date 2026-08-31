@@ -1,20 +1,20 @@
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from polymind.core.hardware.models import HardwareProfile
-
-
-DEFAULT_ARTIFACT_PATH = Path(".polymind/hardware.yaml")
+from polymind.core.paths import hardware_path
 
 
 def load_hardware_profile(
-    path: Path = DEFAULT_ARTIFACT_PATH,
+    path: Path | None = None,
 ) -> HardwareProfile:
+    if path is None:
+        path = hardware_path()
     if not path.exists():
         raise FileNotFoundError(
-            f"Hardware profile not found: {path}. "
-            "Run 'polymind hardware scan' first."
+            f"Hardware profile not found: {path}. Run 'polymind hardware scan' first."
         )
 
     with path.open("r", encoding="utf-8") as file:
@@ -26,7 +26,7 @@ def load_hardware_profile(
     return _parse_profile(data)
 
 
-def _parse_profile(data: dict) -> HardwareProfile:
+def _parse_profile(data: dict[str, Any]) -> HardwareProfile:
     """
     Convert the YAML representation back into the domain model.
 
@@ -37,8 +37,8 @@ def _parse_profile(data: dict) -> HardwareProfile:
     from polymind.core.hardware.models import (
         CPUInfo,
         GPUComputeInfo,
-        GPUMemoryInfo,
         GPUInfo,
+        GPUMemoryInfo,
         GPUSelection,
         LlamaCppGPUInfo,
         LlamaCppHardwareOptions,
@@ -58,9 +58,7 @@ def _parse_profile(data: dict) -> HardwareProfile:
     missing = [key for key in required if key not in data]
 
     if missing:
-        raise ValueError(
-            f"Hardware profile is missing required fields: {', '.join(missing)}"
-        )
+        raise ValueError(f"Hardware profile is missing required fields: {', '.join(missing)}")
 
     system_data = data["system"]
     cpu_data = data["cpu"]

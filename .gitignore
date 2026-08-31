@@ -8,3 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Model files (large, should not be committed)
+*.gguf
+polymind/models/
+
+# HuggingFace cache
+.cache/
+.huggingface/
+
+# Polymind local artifacts
+.polymind/

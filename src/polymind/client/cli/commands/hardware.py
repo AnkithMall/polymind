@@ -1,18 +1,26 @@
-from pathlib import Path
 import typer
 
 from polymind.core.hardware.artifact import write_hardware_profile
-from polymind.core.hardware.scanner import scan_hardware
 from polymind.core.hardware.loader import load_hardware_profile
+from polymind.core.hardware.scanner import scan_hardware
 from polymind.core.hardware.validator import validate_hardware_file
-
+from polymind.core.paths import hardware_path
 
 app = typer.Typer()
 
 
 @app.command("scan")
 def scan() -> None:
-    """Scan system hardware and create a hardware profile."""
+    """Scan system hardware and create a hardware profile.
+
+    Detects CPU, memory, GPUs, and llama.cpp availability,
+    then writes the profile to .polymind/hardware.yaml.
+    Run this after hardware changes or first-time setup.
+
+    Examples:
+
+        polymind hardware scan
+    """
 
     typer.echo("Scanning hardware...")
 
@@ -24,7 +32,16 @@ def scan() -> None:
 
 @app.command("show")
 def show() -> None:
-    """Display the current hardware profile."""
+    """Display the current hardware profile.
+
+    Shows detailed information about the detected system including
+    CPU model and cores, memory, GPU details (VRAM, backend,
+    llama.cpp support), and GPU selection status.
+
+    Examples:
+
+        polymind hardware show
+    """
 
     try:
         profile = load_hardware_profile()
@@ -49,9 +66,7 @@ def show() -> None:
     typer.echo()
     typer.echo("Memory")
     typer.echo("------")
-    typer.echo(
-        f"Total: {profile.memory.total_bytes / (1024 ** 3):.2f} GiB"
-    )
+    typer.echo(f"Total: {profile.memory.total_bytes / (1024**3):.2f} GiB")
 
     typer.echo()
     typer.echo("GPUs")
@@ -61,12 +76,10 @@ def show() -> None:
         typer.echo("No GPUs detected.")
     else:
         for gpu in profile.gpus:
-            total_gib = gpu.memory.total_bytes / (1024 ** 3)
+            total_gib = gpu.memory.total_bytes / (1024**3)
 
             if gpu.memory.available_bytes is not None:
-                available_gib = (
-                    gpu.memory.available_bytes / (1024 ** 3)
-                )
+                available_gib = gpu.memory.available_bytes / (1024**3)
             else:
                 available_gib = None
 
@@ -75,53 +88,36 @@ def show() -> None:
             typer.echo(f"    VRAM:      {total_gib:.2f} GiB")
 
             if available_gib is not None:
-                typer.echo(
-                    f"    Available: {available_gib:.2f} GiB"
-                )
+                typer.echo(f"    Available: {available_gib:.2f} GiB")
 
-            typer.echo(
-                f"    Backend:   {gpu.compute.backend or 'none'}"
-            )
-            typer.echo(
-                "    llama.cpp: "
-                f"{'yes' if gpu.compute.llama_cpp_usable else 'no'}"
-            )
-            typer.echo(
-                "    Selected:  "
-                f"{'yes' if gpu.selection.enabled else 'no'}"
-            )
+            typer.echo(f"    Backend:   {gpu.compute.backend or 'none'}")
+            typer.echo(f"    llama.cpp: {'yes' if gpu.compute.llama_cpp_usable else 'no'}")
+            typer.echo(f"    Selected:  {'yes' if gpu.selection.enabled else 'no'}")
 
     typer.echo()
     typer.echo("llama.cpp")
     typer.echo("---------")
-    typer.echo(
-        f"Available:     "
-        f"{'yes' if profile.llama_cpp.available else 'no'}"
-    )
-    typer.echo(
-        f"Backends:      "
-        f"{', '.join(profile.llama_cpp.backends) or 'none'}"
-    )
-    typer.echo(
-        f"Usable GPUs:   "
-        f"{profile.llama_cpp.usable_gpus}"
-    )
-    typer.echo(
-        f"Selected GPUs: "
-        f"{profile.llama_cpp.selected_gpus}"
-    )
-    typer.echo(
-        f"Multi-GPU:     "
-        f"{'yes' if profile.llama_cpp.multi_gpu_available else 'no'}"
-    )
-
+    typer.echo(f"Available:     {'yes' if profile.llama_cpp.available else 'no'}")
+    typer.echo(f"Backends:      {', '.join(profile.llama_cpp.backends) or 'none'}")
+    typer.echo(f"Usable GPUs:   {profile.llama_cpp.usable_gpus}")
+    typer.echo(f"Selected GPUs: {profile.llama_cpp.selected_gpus}")
+    typer.echo(f"Multi-GPU:     {'yes' if profile.llama_cpp.multi_gpu_available else 'no'}")
 
 
 @app.command("validate")
 def validate() -> None:
-    """Validate the current hardware profile."""
+    """Validate the current hardware profile.
 
-    path = Path(".polymind/hardware.yaml")
+    Checks the hardware profile file for consistency and reports
+    any errors or warnings. Use this to diagnose issues with
+    model compatibility or GPU selection.
+
+    Examples:
+
+        polymind hardware validate
+    """
+
+    path = hardware_path()
 
     result = validate_hardware_file(path)
 
@@ -150,10 +146,7 @@ def validate() -> None:
         selected = profile.llama_cpp.selected_gpus
 
         if selected:
-            typer.echo(
-                "Selected GPUs: "
-                + ", ".join(str(gpu_id) for gpu_id in selected)
-            )
+            typer.echo("Selected GPUs: " + ", ".join(str(gpu_id) for gpu_id in selected))
         else:
             typer.echo("Selected GPUs: none")
 

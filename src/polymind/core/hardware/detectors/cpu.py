@@ -2,7 +2,6 @@ import platform
 
 import psutil
 
-
 from polymind.core.hardware.models import CPUInfo
 
 

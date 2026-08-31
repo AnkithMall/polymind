@@ -3,16 +3,51 @@ from typing import Any
 
 import yaml
 
+from polymind.core.paths import runtime_path
 from polymind.core.runtime.types import RuntimeConfig
 
 
-DEFAULT_ARTIFACT_PATH = Path(".polymind/runtime.yaml")
+def load_runtime_config(
+    model_id: str,
+    path: Path | None = None,
+) -> RuntimeConfig | None:
+    """
+    Load runtime configuration for a model from runtime.yaml.
+
+    Returns None if no config exists for this model.
+    """
+    if path is None:
+        path = runtime_path()
+
+    if not path.exists():
+        return None
+
+    with path.open("r", encoding="utf-8") as file:
+        data = yaml.safe_load(file) or {}
+
+    models = data.get("models", {})
+    model_data = models.get(model_id)
+
+    if not model_data:
+        return None
+
+    return RuntimeConfig(
+        model_id=model_data.get("model_id", model_id),
+        gpu_layers=model_data.get("gpu_layers", -1),
+        threads=model_data.get("threads", 4),
+        context_size=model_data.get("context_size", 4096),
+        batch_size=model_data.get("batch_size", 512),
+        benchmark=model_data.get("benchmark", {}),
+    )
 
 
 def write_runtime_config(
     config: RuntimeConfig,
-    path: Path = DEFAULT_ARTIFACT_PATH,
+    path: Path | None = None,
 ) -> Path:
+    if path is None:
+        path = runtime_path()
+
     path.parent.mkdir(
         parents=True,
         exist_ok=True,

@@ -6,7 +6,6 @@ from polymind.core.model.types import (
     RankedModel,
 )
 
-
 GPU_SAFETY_MARGIN = 0.80
 RAM_SAFETY_MARGIN = 0.75
 
@@ -16,10 +15,7 @@ def rank_models(
     hardware: HardwareProfile,
 ) -> list[RankedModel]:
 
-    available_vram = (
-        _selected_gpu_memory(hardware)
-        or 0
-    )
+    available_vram = _selected_gpu_memory(hardware) or 0
 
     available_ram = hardware.memory.total_bytes
 
@@ -27,7 +23,6 @@ def rank_models(
 
     for model in models:
         for file in model.files:
-
             if file.size_bytes is None:
                 continue
 
@@ -74,18 +69,14 @@ def rank_models(
             # -------------------------------------------------
 
             if file.quantization:
-                score += quantization_score(
-                    file.quantization
-                )
+                score += quantization_score(file.quantization)
             else:
                 score -= 10
 
             # Prefer larger models when hardware can
             # reasonably support them.
             if model.parameter_count_b is not None:
-                score += parameter_score(
-                    model.parameter_count_b
-                )
+                score += parameter_score(model.parameter_count_b)
 
             # -------------------------------------------------
             # Popularity
@@ -107,7 +98,8 @@ def rank_models(
 
             recommended = (
                 ram_status == "fits"
-                and vram_status in {
+                and vram_status
+                in {
                     "likely-fit",
                     "partial-offload",
                 }
@@ -145,6 +137,7 @@ def rank_models(
 
     return ranked
 
+
 def classify_vram(
     model_size: int,
     available_vram: int,
@@ -179,14 +172,11 @@ def _selected_gpu_memory(
     hardware: HardwareProfile,
 ) -> int | None:
 
-    selected = set(
-        hardware.llama_cpp.selected_gpus
-    )
+    selected = set(hardware.llama_cpp.selected_gpus)
 
     memories: list[int] = []
 
     for gpu in hardware.gpus:
-
         if gpu.id not in selected:
             continue
 
@@ -194,14 +184,10 @@ def _selected_gpu_memory(
             continue
 
         if gpu.memory.available_bytes:
-            memories.append(
-                gpu.memory.available_bytes
-            )
+            memories.append(gpu.memory.available_bytes)
 
         elif gpu.memory.total_bytes:
-            memories.append(
-                gpu.memory.total_bytes
-            )
+            memories.append(gpu.memory.total_bytes)
 
     if not memories:
         return None

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal,Optional
+from typing import Literal
 
 Recommendation = Literal[
     "excellent",
@@ -9,11 +9,12 @@ Recommendation = Literal[
     "not-recommended",
 ]
 
+
 @dataclass
 class ModelFile:
     filename: str
-    size_bytes: Optional[int]
-    quantization: Optional[str]
+    size_bytes: int | None
+    quantization: str | None
 
     # GGUF sharding information.
     shard_index: int | None = None
@@ -47,8 +48,8 @@ class RankedModel:
     # Logical model filename/group.
     filename: str
 
-    size_bytes: Optional[int]
-    quantization: Optional[str]
+    size_bytes: int | None
+    quantization: str | None
 
     downloads: int
     likes: int
@@ -69,3 +70,6 @@ class RankedModel:
 
     # GGUF shard information.
     shard_count: int = 1
+
+    # Whether this model is already downloaded.
+    downloaded: bool = False

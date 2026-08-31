@@ -3,15 +3,16 @@ from pathlib import Path
 import yaml
 
 from polymind.core.hardware.models import HardwareProfile
-
-
-DEFAULT_ARTIFACT_PATH = Path(".polymind/hardware.yaml")
+from polymind.core.paths import hardware_path
 
 
 def write_hardware_profile(
     profile: HardwareProfile,
-    path: Path = DEFAULT_ARTIFACT_PATH,
+    path: Path | None = None,
 ) -> Path:
+    if path is None:
+        path = hardware_path()
+
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8") as file:

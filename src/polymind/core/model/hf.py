@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from huggingface_hub import HfApi, hf_hub_download
 
@@ -10,6 +9,24 @@ from polymind.core.model.types import (
     ModelCandidate,
     ModelFile,
 )
+
+NON_TEXT_PATTERNS = ("mmproj", "mm-proj", "mm_proj", "visual")
+
+
+def is_text_model(filename: str) -> bool:
+    """Check if a GGUF file is a text model (not a projection adapter)."""
+    lower = filename.lower()
+    # Check both prefix and if the pattern appears anywhere as a component
+    for pattern in NON_TEXT_PATTERNS:
+        if (
+            lower.startswith(pattern)
+            or f"-{pattern}-" in lower
+            or f"_{pattern}_" in lower
+            or lower.endswith(f"-{pattern}.gguf")
+            or lower.endswith(f"_{pattern}.gguf")
+        ):
+            return False
+    return True
 
 
 class HuggingFaceClient:
@@ -48,17 +65,14 @@ class HuggingFaceClient:
                 if not filename.lower().endswith(".gguf"):
                     continue
 
-                quantization = detect_quantization(
-                    filename
-                )
+                if not is_text_model(filename):
+                    continue
 
-                shard_index, shard_count = detect_shard(
-                    filename
-                )
+                quantization = detect_quantization(filename)
 
-                group_key = model_group_key(
-                    filename
-                )
+                shard_index, shard_count = detect_shard(filename)
+
+                group_key = model_group_key(filename)
 
                 size_bytes = getattr(
                     sibling,
@@ -87,13 +101,9 @@ class HuggingFaceClient:
             filtered_files: list[ModelFile] = []
 
             for file in files:
-                if (
-                    options.quantization
-                    and (
-                        file.quantization is None
-                        or file.quantization.upper()
-                        != options.quantization.upper()
-                    )
+                if options.quantization and (
+                    file.quantization is None
+                    or file.quantization.upper() != options.quantization.upper()
                 ):
                     continue
 
@@ -135,9 +145,7 @@ class HuggingFaceClient:
                         0,
                     )
                     or 0,
-                    parameter_count_b=detect_parameter_count(
-                        model.id
-                    ),
+                    parameter_count_b=detect_parameter_count(model.id),
                     files=filtered_files,
                 )
             )
@@ -159,7 +167,7 @@ class HuggingFaceClient:
 
 def detect_quantization(
     filename: str,
-) -> Optional[str]:
+) -> str | None:
     """
     Extract common GGUF quantization names.
 
@@ -168,6 +176,12 @@ def detect_quantization(
     """
 
     upper = filename.upper()
+
+    # Skip non-text models (projection adapters, etc.)
+    non_text_prefixes = ["MMPROJ", "MM-PROJ", "VISUAL"]
+    for prefix in non_text_prefixes:
+        if upper.startswith(prefix):
+            return None
 
     quantizations = [
         "IQ1_S",
@@ -287,11 +301,7 @@ def merge_shards(
 
         total_size: int | None
 
-        sizes = [
-            file.size_bytes
-            for file in group
-            if file.size_bytes is not None
-        ]
+        sizes = [file.size_bytes for file in group if file.size_bytes is not None]
 
         if sizes:
             total_size = sum(sizes)
@@ -299,11 +309,7 @@ def merge_shards(
             total_size = None
 
         shard_count = max(
-            (
-                file.shard_count
-                for file in group
-                if file.shard_count is not None
-            ),
+            (file.shard_count for file in group if file.shard_count is not None),
             default=1,
         )
 

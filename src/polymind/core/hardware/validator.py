@@ -23,9 +23,7 @@ def validate_hardware_profile(
     # ---------------------------------------------------------
 
     if profile.version != 1:
-        errors.append(
-            f"Unsupported hardware profile version: {profile.version}"
-        )
+        errors.append(f"Unsupported hardware profile version: {profile.version}")
 
     # ---------------------------------------------------------
     # GPU IDs
@@ -36,10 +34,7 @@ def validate_hardware_profile(
     if len(gpu_ids) != len(set(gpu_ids)):
         errors.append("GPU IDs must be unique.")
 
-    gpu_map = {
-        gpu.id: gpu
-        for gpu in profile.gpus
-    }
+    gpu_map = {gpu.id: gpu for gpu in profile.gpus}
 
     # ---------------------------------------------------------
     # llama.cpp availability
@@ -47,9 +42,7 @@ def validate_hardware_profile(
 
     if profile.llama_cpp.available:
         if not profile.llama_cpp.backends:
-            errors.append(
-                "llama.cpp is marked available but no backends are configured."
-            )
+            errors.append("llama.cpp is marked available but no backends are configured.")
 
     # ---------------------------------------------------------
     # Usable GPUs
@@ -61,9 +54,7 @@ def validate_hardware_profile(
         gpu = gpu_map.get(gpu_id)
 
         if gpu is None:
-            errors.append(
-                f"llama.cpp usable GPU {gpu_id} does not exist."
-            )
+            errors.append(f"llama.cpp usable GPU {gpu_id} does not exist.")
             continue
 
         if not gpu.compute.llama_cpp_usable:
@@ -73,9 +64,7 @@ def validate_hardware_profile(
             )
 
         if gpu.compute.backend is None:
-            errors.append(
-                f"GPU {gpu_id} is llama.cpp usable but has no backend."
-            )
+            errors.append(f"GPU {gpu_id} is llama.cpp usable but has no backend.")
 
     # ---------------------------------------------------------
     # Selected GPUs
@@ -84,39 +73,26 @@ def validate_hardware_profile(
     selected_gpu_ids = profile.llama_cpp.selected_gpus
 
     if len(selected_gpu_ids) != len(set(selected_gpu_ids)):
-        errors.append(
-            "Selected GPU IDs must be unique."
-        )
+        errors.append("Selected GPU IDs must be unique.")
 
     for gpu_id in selected_gpu_ids:
         gpu = gpu_map.get(gpu_id)
 
         if gpu is None:
-            errors.append(
-                f"Selected GPU {gpu_id} does not exist."
-            )
+            errors.append(f"Selected GPU {gpu_id} does not exist.")
             continue
 
         if gpu_id not in usable_gpu_ids:
-            errors.append(
-                f"Selected GPU {gpu_id} is not listed as "
-                "llama.cpp usable."
-            )
+            errors.append(f"Selected GPU {gpu_id} is not listed as llama.cpp usable.")
 
         if not gpu.compute.llama_cpp_usable:
-            errors.append(
-                f"Selected GPU {gpu_id} cannot be used by llama.cpp."
-            )
+            errors.append(f"Selected GPU {gpu_id} cannot be used by llama.cpp.")
 
         if gpu.compute.backend is None:
-            errors.append(
-                f"Selected GPU {gpu_id} has no llama.cpp backend."
-            )
+            errors.append(f"Selected GPU {gpu_id} has no llama.cpp backend.")
 
         if gpu.llama_cpp.device is None:
-            errors.append(
-                f"Selected GPU {gpu_id} has no llama.cpp device ID."
-            )
+            errors.append(f"Selected GPU {gpu_id} has no llama.cpp device ID.")
 
     # ---------------------------------------------------------
     # Multi-GPU consistency
@@ -125,10 +101,7 @@ def validate_hardware_profile(
     expected_multi_gpu = len(usable_gpu_ids) > 1
 
     if profile.llama_cpp.multi_gpu_available != expected_multi_gpu:
-        warnings.append(
-            "multi_gpu_available does not match the number "
-            "of usable GPUs."
-        )
+        warnings.append("multi_gpu_available does not match the number of usable GPUs.")
 
     # ---------------------------------------------------------
     # Selection consistency
@@ -139,8 +112,7 @@ def validate_hardware_profile(
 
         if gpu.selection.enabled != selected:
             warnings.append(
-                f"GPU {gpu.id} selection.enabled does not match "
-                "llama_cpp.selected_gpus."
+                f"GPU {gpu.id} selection.enabled does not match llama_cpp.selected_gpus."
             )
 
     # ---------------------------------------------------------
@@ -148,9 +120,7 @@ def validate_hardware_profile(
     # ---------------------------------------------------------
 
     if profile.llama_cpp.available and not selected_gpu_ids:
-        warnings.append(
-            "llama.cpp GPUs are available but none are selected."
-        )
+        warnings.append("llama.cpp GPUs are available but none are selected.")
 
     return ValidationResult(
         valid=not errors,

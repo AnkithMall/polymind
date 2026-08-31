@@ -14,25 +14,17 @@ def scan_hardware() -> HardwareProfile:
     gpus = detect_gpus()
     system = detect_system()
 
-    usable_gpus = [
-        gpu.id
-        for gpu in gpus
-        if gpu.compute.llama_cpp_usable
-    ]
+    usable_gpus = [gpu.id for gpu in gpus if gpu.compute.llama_cpp_usable]
 
     selected_gpus = [
-        gpu.id
-        for gpu in gpus
-        if gpu.compute.llama_cpp_usable
-        and gpu.selection.enabled
+        gpu.id for gpu in gpus if gpu.compute.llama_cpp_usable and gpu.selection.enabled
     ]
 
     backends = sorted(
         {
             gpu.compute.backend
             for gpu in gpus
-            if gpu.compute.llama_cpp_usable
-            and gpu.compute.backend is not None
+            if gpu.compute.llama_cpp_usable and gpu.compute.backend is not None
         }
     )
 
