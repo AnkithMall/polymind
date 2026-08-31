@@ -129,16 +129,16 @@ jobs:
           tag_name: v${{ steps.version.outputs.version }}
           name: v${{ steps.version.outputs.version }}
           body: |
-            ## polymind v${{ steps.version.outputs.version }}
+            ## polymind-ai v${{ steps.version.outputs.version }}
 
             ### Install from PyPI
             ```bash
-            pip install polymind==${{ steps.version.outputs.version }}
+            pip install polymind-ai==${{ steps.version.outputs.version }}
             ```
 
             Or with uv:
             ```bash
-            uv add polymind==${{ steps.version.outputs.version }}
+            uv add polymind-ai==${{ steps.version.outputs.version }}
             ```
 
             ### Install from source

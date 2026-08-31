@@ -1,5 +1,5 @@
 [project]
-name = "polymind-cli"
+name = "polymind-ai"
 version = "0.1.0"
 description = "Hardware-aware local LLM toolkit with auto-optimization, domain scoring, and multi-model pipelines"
 readme = "README.md"
@@ -29,8 +29,11 @@ dev = [
 polymind = "polymind.client.cli.app:main"
 
 [build-system]
-requires = ["uv_build>=0.12.1,<0.13.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
