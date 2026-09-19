@@ -1,169 +1,74 @@
+"""Polymind configuration — reads/writes polymind.yaml in .polymind/."""
+
 from __future__ import annotations
 
-import logging
-import os
-import re
 from pathlib import Path
-from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
 
-from polymind.core.types import ExecutionStrategy, ModelSource, RankingMode
+from polymind.core.paths import config_path
 
-logger = logging.getLogger(__name__)
-
-
-ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
-
-
-def resolve_env_vars(value: Any) -> Any:
-    if isinstance(value, str):
-
-        def _replace(m: re.Match) -> str:
-            var = m.group(1)
-            resolved = os.environ.get(var, "")
-            if resolved:
-                logger.debug("Resolved env var ${%s}", var)
-            return resolved
-
-        return ENV_VAR_PATTERN.sub(_replace, value)
-    if isinstance(value, dict):
-        return {k: resolve_env_vars(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [resolve_env_vars(v) for v in value]
-    return value
+# ── Default configuration ────────────────────────────────────
+DEFAULTS = {
+    "logging": {
+        "enabled": True,
+        "max_bytes": 5 * 1024 * 1024,  # 5 MB per log file
+        "backup_count": 3,  # Keep 3 rotated files
+        "max_age_days": 7,  # Delete logs older than N days
+        "max_total_files": 10,  # Max total log files in .logs/
+        "max_total_size_mb": 50,  # Max total size of all logs combined
+    },
+    "pipeline": {
+        "max_concurrent": 1,
+        "timeout_seconds": 120,
+        "max_retries": 1,
+        "min_task_score": 0.5,
+    },
+}
 
 
-class ProviderConfig(BaseModel):
-    provider: str = "ollama"
-    model: str = ""
-    base_url: str | None = None
-    api_key: str | None = None
-    max_tokens: int = 4096
-    temperature: float = 0.7
-    timeout_s: int = 60
+def load_config() -> dict:
+    """Load polymind.yaml, merging with defaults for missing keys."""
+    path = config_path()
+    cfg = dict(DEFAULTS)
 
-
-class SchedulerConfig(BaseModel):
-    strategy: ExecutionStrategy = ExecutionStrategy.model_aware
-    pass_context: bool = True
-    max_concurrent: int = 1
-
-
-class ModelConfig(BaseModel):
-    name: str
-    provider: str = "ollama"
-    base_url: str | None = None
-    api_key: str | None = None
-    max_tokens: int = 4096
-    temperature: float = 0.7
-    timeout_s: int = 60
-
-
-class Config(BaseModel):
-    models: list[ModelConfig] = Field(default_factory=list)
-    router_model: str = "ollama/llama3.2:1b"
-    synthesizer_model: str | None = None
-    judge_model: str = "ollama/llama3.2:1b"
-    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
-    data_dir: str = "~/.polymind"
-    verbose: bool = False
-    profile: str | None = None
-    keep_alive: str | None = None
-    litellm_proxy: str | None = None
-    ranking_mode: RankingMode = RankingMode.accuracy
-    model_source: ModelSource = ModelSource.all
-
-    def get_resolved_profile(self) -> dict[str, Any]:
-        profiles: dict[str, dict[str, Any]] = {
-            "quality": {
-                "scheduler": {"strategy": "model_aware", "pass_context": True},
-            },
-            "fast": {
-                "scheduler": {"strategy": "sequential", "pass_context": False},
-                "router_model": "ollama/llama3.2:1b",
-            },
-            "private": {
-                "scheduler": {"strategy": "sequential", "pass_context": True},
-            },
-        }
-        base = {
-            "models": self.models,
-            "router_model": self.router_model,
-            "synthesizer_model": self.synthesizer_model,
-            "judge_model": self.judge_model,
-            "scheduler": self.scheduler.model_dump(),
-            "data_dir": self.data_dir,
-            "verbose": self.verbose,
-            "keep_alive": self.keep_alive,
-            "litellm_proxy": self.litellm_proxy,
-            "ranking_mode": self.ranking_mode.value,
-            "model_source": self.model_source.value,
-        }
-        if self.profile and self.profile in profiles:
-            merged = {**base}
-            for k, v in profiles[self.profile].items():
-                if isinstance(v, dict) and k in merged and isinstance(merged[k], dict):
-                    merged[k] = {**merged[k], **v}
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            # Deep merge
+            for section, values in data.items():
+                if isinstance(values, dict) and section in cfg:
+                    cfg[section] = {**cfg[section], **values}
                 else:
-                    merged[k] = v
-            return merged
-        return base
+                    cfg[section] = values
+        except Exception:
+            pass
 
-    @classmethod
-    def from_yaml(cls, path: str | Path) -> "Config":
-        path = Path(path).expanduser()
-        logger.debug("Loading config from %s", path)
-        if not path.exists():
-            logger.debug("Config file %s not found, returning defaults", path)
-            return cls()
+    return cfg
 
-        with open(path) as f:
-            raw = yaml.safe_load(f)
 
-        if raw is None:
-            logger.debug("Config file %s is empty, returning defaults", path)
-            return cls()
+def save_config(cfg: dict) -> Path:
+    """Write polymind.yaml."""
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-        resolved = resolve_env_vars(raw)
-        logger.debug("Environment variables resolved in config")
-        config = cls.model_validate(resolved)
-        logger.debug("Config loaded: %d models defined", len(config.models))
-        return config
+    with path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False, default_flow_style=False)
 
-    def to_yaml(self, path: str | Path) -> None:
-        path = Path(path).expanduser()
-        logger.debug("Saving config to %s", path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            yaml.dump(
-                self.model_dump(mode="json"),
-                f,
-                default_flow_style=False,
-                sort_keys=False,
-            )
-        logger.debug("Config saved to %s", path)
+    return path
 
-    @classmethod
-    def default_yaml(cls) -> str:
-        return yaml.dump(
-            {
-                "models": [
-                    {"name": "llama3.2:1b", "provider": "ollama"},
-                ],
-                "router_model": "ollama/llama3.2:1b",
-                "synthesizer_model": None,
-                "judge_model": "ollama/llama3.2:1b",
-                "scheduler": {"strategy": "model_aware", "pass_context": True},
-                "data_dir": "~/.polymind",
-                "verbose": False,
-                "profile": None,
-                "keep_alive": None,
-                "litellm_proxy": None,
-                "ranking_mode": "accuracy",
-                "model_source": "all",
-            },
-            default_flow_style=False,
-            sort_keys=False,
-        )
+
+def get_logging_config() -> dict:
+    """Get just the logging section of the config."""
+    return load_config().get("logging", DEFAULTS["logging"])
+
+
+def update_logging_config(**kwargs) -> dict:
+    """Update logging config keys and save."""
+    cfg = load_config()
+    logging_cfg = cfg.get("logging", {})
+    logging_cfg.update(kwargs)
+    cfg["logging"] = logging_cfg
+    save_config(cfg)
+    return logging_cfg
