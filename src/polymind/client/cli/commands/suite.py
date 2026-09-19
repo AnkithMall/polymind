@@ -414,12 +414,8 @@ def edit_question(
     question_id: str = typer.Argument(..., help="Question ID to edit."),
     prompt: str = typer.Option("", "--prompt", "-p", help="New question prompt."),
     expected: str = typer.Option("", "--expected", "-e", help="New expected answer."),
-    evaluation: str = typer.Option(
-        "", "--evaluation", help="New evaluation method."
-    ),
-    keywords: str = typer.Option(
-        "", "--keywords", help="New comma-separated keywords."
-    ),
+    evaluation: str = typer.Option("", "--evaluation", help="New evaluation method."),
+    keywords: str = typer.Option("", "--keywords", help="New comma-separated keywords."),
 ) -> None:
     """Edit a question in a test suite.
 
@@ -462,7 +458,13 @@ def edit_question(
     if expected:
         question.expected = expected
     if evaluation:
-        if evaluation not in ("exact_match", "keyword_match", "code_execution", "llm_judge", "hybrid"):
+        if evaluation not in (
+            "exact_match",
+            "keyword_match",
+            "code_execution",
+            "llm_judge",
+            "hybrid",
+        ):
             typer.echo("Invalid evaluation method.", err=True)
             raise typer.Exit(code=1)
         question.evaluation = evaluation
@@ -663,7 +665,9 @@ def _interactive_add_question() -> None:
     keywords_raw = input("  Keywords (comma-separated): ").strip()
     keywords = [k.strip() for k in keywords_raw.split(",") if k.strip()] if keywords_raw else []
 
-    question = TestQuestion(id=q_id, prompt=prompt_text, expected=expected, evaluation=evaluation, keywords=keywords)
+    question = TestQuestion(
+        id=q_id, prompt=prompt_text, expected=expected, evaluation=evaluation, keywords=keywords
+    )
     suite.questions.append(question)
     save_custom_domain(domain)
     console.print(f"  [green]✓ Added question '{q_id}'[/]")
@@ -700,11 +704,11 @@ def _interactive_edit_question() -> None:
     console.print(f"  Current prompt: {question.prompt}")
     console.print("  (Press Enter to keep current value)")
 
-    p = input(f"  Prompt: ").strip()
+    p = input("  Prompt: ").strip()
     if p:
         question.prompt = p
 
-    e = input(f"  Expected: ").strip()
+    e = input("  Expected: ").strip()
     if e:
         question.expected = e
 

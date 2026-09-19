@@ -18,6 +18,7 @@ from polymind.core.confidence.scorer import (
     score_question,
 )
 from polymind.core.confidence.types import (
+    Domain,
     DomainScore,
     ModelConfidence,
     SuiteScore,
@@ -117,11 +118,11 @@ def compute_confidence(
         current_hash = compute_domain_hash(domain)
         stored = stored_hashes.get(domain.id)
 
-        if not force and stored == current_hash and domain.id in {
-            did
-            for conf in all_scores.values()
-            for did in conf.domains
-        }:
+        if (
+            not force
+            and stored == current_hash
+            and domain.id in {did for conf in all_scores.values() for did in conf.domains}
+        ):
             skipped_domains.append(domain.id)
         else:
             domains_to_compute.append((domain, current_hash))
@@ -263,9 +264,7 @@ def show_confidence(
     domain_id: str = typer.Option(
         "", "--domain", "-d", help="Domain ID to show detailed breakdown for."
     ),
-    explain: bool = typer.Option(
-        False, "--explain", help="Show explanation of scoring terms."
-    ),
+    explain: bool = typer.Option(False, "--explain", help="Show explanation of scoring terms."),
     output_json: bool = typer.Option(
         False, "--json", help="Output full result as JSON instead of formatted text."
     ),

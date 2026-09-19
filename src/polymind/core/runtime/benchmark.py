@@ -20,22 +20,20 @@ Each subprocess:
 
 from __future__ import annotations
 
-import json
 import multiprocessing
 import os
 import signal
-import sys
 import time
 from pathlib import Path
 from statistics import median
 
 from polymind.core.runtime.types import (
+    DEFAULT_WORKLOADS,
     BenchmarkMetrics,
     CandidateConfig,
     CandidateStatus,
     SubprocessBenchmarkResult,
     WorkloadProfile,
-    DEFAULT_WORKLOADS,
 )
 
 # Subprocess timeout (seconds)
@@ -46,6 +44,7 @@ REPEAT_COUNT = 3
 
 
 # ── Benchmark worker (runs in subprocess) ──────────────────────
+
 
 def _benchmark_worker(
     model_path: str,
@@ -78,7 +77,7 @@ def _benchmark_worker(
         load_time = (time.perf_counter() - t_start) * 1000
 
         # Measure peak memory after load
-        peak_ram_mb = _get_peak_ram_mb()
+        _peak_ram_mb = _get_peak_ram_mb()
 
         # Tokenize prompt
         prompt_tokens = llm.tokenize(prompt.encode("utf-8"))
@@ -86,7 +85,7 @@ def _benchmark_worker(
 
         # Warmup (short)
         try:
-            llm.eval(prompt_tokens[:min(8, len(prompt_tokens))])
+            llm.eval(prompt_tokens[: min(8, len(prompt_tokens))])
         except Exception:
             pass
 
@@ -166,9 +165,12 @@ def _get_peak_vram_mb() -> float:
     """Query current GPU VRAM usage via nvidia-smi."""
     try:
         import subprocess
+
         r = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if r.returncode == 0 and r.stdout.strip():
             values = [float(v.strip()) for v in r.stdout.strip().split("\n") if v.strip()]
@@ -182,6 +184,7 @@ def _get_peak_ram_mb() -> float:
     """Query current process RAM usage."""
     try:
         import psutil
+
         proc = psutil.Process(os.getpid())
         return proc.memory_info().rss / (1024 * 1024)
     except Exception:
@@ -193,9 +196,12 @@ def _get_free_vram_mb() -> float:
     """Query current free GPU VRAM."""
     try:
         import subprocess
+
         r = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if r.returncode == 0 and r.stdout.strip():
             values = [float(v.strip()) for v in r.stdout.strip().split("\n") if v.strip()]
@@ -206,6 +212,7 @@ def _get_free_vram_mb() -> float:
 
 
 # ── Subprocess benchmark runner ────────────────────────────────
+
 
 def run_benchmark_subprocess(
     model_path: Path,
@@ -306,6 +313,7 @@ def _classify_exit_code(code: int) -> str:
 
 # ── Multi-run benchmark with median ────────────────────────────
 
+
 def benchmark_candidate(
     model_path: Path,
     candidate: CandidateConfig,
@@ -394,6 +402,7 @@ def benchmark_candidate(
 
 # ── Free memory check ──────────────────────────────────────────
 
+
 def get_available_gpu_memory_mb() -> float:
     """Get current free GPU VRAM in MB. Returns 0 if no GPU."""
     return _get_free_vram_mb()
@@ -403,6 +412,7 @@ def get_available_ram_mb() -> float:
     """Get current free system RAM in MB."""
     try:
         import psutil
+
         return psutil.virtual_memory().available / (1024 * 1024)
     except Exception:
         return 0.0

@@ -13,8 +13,6 @@ Covers:
   - Decomposer dynamic domains
 """
 
-from pathlib import Path
-
 import yaml
 from typer.testing import CliRunner
 
@@ -57,7 +55,9 @@ class TestBug003Regression:
             assert mid in data["models"]
 
         # Now update model 2
-        config2 = RuntimeConfig(model_id="2", gpu_layers=32, threads=8, context_size=4096, batch_size=256)
+        config2 = RuntimeConfig(
+            model_id="2", gpu_layers=32, threads=8, context_size=4096, batch_size=256
+        )
         write_runtime_config(config2, runtime_yaml)
 
         # Verify all 4 models still exist
@@ -117,11 +117,16 @@ class TestBug003Regression:
         data = {
             "version": 1,
             "models": {
-                1: {"model_id": "1", "gpu_layers": 24, "threads": 4, "context_size": 2048, "batch_size": 128},
+                1: {
+                    "model_id": "1",
+                    "gpu_layers": 24,
+                    "threads": 4,
+                    "context_size": 2048,
+                    "batch_size": 128,
+                },
             },
         }
         with runtime_yaml.open("w") as f:
-            yaml.safe_load
             yaml.safe_dump(data, f)
 
         config = load_runtime_config("1", runtime_yaml)
@@ -135,9 +140,27 @@ class TestBug003Regression:
         data = {
             "version": 1,
             "models": {
-                "1": {"model_id": "1", "gpu_layers": 24, "threads": 4, "context_size": 2048, "batch_size": 128},
-                "2": {"model_id": "2", "gpu_layers": 16, "threads": 4, "context_size": 2048, "batch_size": 256},
-                "3": {"model_id": "3", "gpu_layers": 8, "threads": 2, "context_size": 1024, "batch_size": 128},
+                "1": {
+                    "model_id": "1",
+                    "gpu_layers": 24,
+                    "threads": 4,
+                    "context_size": 2048,
+                    "batch_size": 128,
+                },
+                "2": {
+                    "model_id": "2",
+                    "gpu_layers": 16,
+                    "threads": 4,
+                    "context_size": 2048,
+                    "batch_size": 256,
+                },
+                "3": {
+                    "model_id": "3",
+                    "gpu_layers": 8,
+                    "threads": 2,
+                    "context_size": 1024,
+                    "batch_size": 128,
+                },
             },
         }
         with runtime_yaml.open("w") as f:
@@ -192,7 +215,11 @@ class TestDomainAliases:
 
     def test_custom_domain_with_aliases_persists(self):
         """Custom domain with aliases should persist correctly."""
-        from polymind.core.confidence.artifact import save_custom_domain, load_domain_by_id, delete_custom_domain
+        from polymind.core.confidence.artifact import (
+            delete_custom_domain,
+            load_domain_by_id,
+            save_custom_domain,
+        )
         from polymind.core.confidence.types import Domain
 
         domain = Domain(
@@ -222,42 +249,42 @@ class TestDomainResolution:
 
     def test_resolve_by_id(self):
         """Should resolve by exact domain ID."""
-        from polymind.core.confidence.suites import resolve_domain_id, get_all_domains
+        from polymind.core.confidence.suites import get_all_domains, resolve_domain_id
 
         result = resolve_domain_id("mathematics", get_all_domains())
         assert result == "mathematics"
 
     def test_resolve_by_name(self):
         """Should resolve by domain name."""
-        from polymind.core.confidence.suites import resolve_domain_id, get_all_domains
+        from polymind.core.confidence.suites import get_all_domains, resolve_domain_id
 
         result = resolve_domain_id("Mathematics", get_all_domains())
         assert result == "mathematics"
 
     def test_resolve_by_alias(self):
         """Should resolve by alias."""
-        from polymind.core.confidence.suites import resolve_domain_id, get_all_domains
+        from polymind.core.confidence.suites import get_all_domains, resolve_domain_id
 
         result = resolve_domain_id("math", get_all_domains())
         assert result == "mathematics"
 
     def test_resolve_case_insensitive(self):
         """Should be case insensitive."""
-        from polymind.core.confidence.suites import resolve_domain_id, get_all_domains
+        from polymind.core.confidence.suites import get_all_domains, resolve_domain_id
 
         assert resolve_domain_id("MATH", get_all_domains()) == "mathematics"
         assert resolve_domain_id("Code", get_all_domains()) == "coding"
 
     def test_resolve_unknown_returns_none(self):
         """Unknown domain should return None."""
-        from polymind.core.confidence.suites import resolve_domain_id, get_all_domains
+        from polymind.core.confidence.suites import get_all_domains, resolve_domain_id
 
         result = resolve_domain_id("nonexistent_domain_xyz", get_all_domains())
         assert result is None
 
     def test_resolve_custom_alias(self, tmp_polymind, env_override):
         """Should resolve custom domain aliases."""
-        from polymind.core.confidence.artifact import save_custom_domain, delete_custom_domain
+        from polymind.core.confidence.artifact import delete_custom_domain, save_custom_domain
         from polymind.core.confidence.suites import resolve_domain_id
         from polymind.core.confidence.types import Domain
 
@@ -302,8 +329,17 @@ class TestCategoryCommand:
         """category add and delete should work for custom categories."""
         result = runner.invoke(
             app,
-            ["category", "add", "test_cat", "--name", "Test Category",
-             "--description", "A test", "--aliases", "test,testing"],
+            [
+                "category",
+                "add",
+                "test_cat",
+                "--name",
+                "Test Category",
+                "--description",
+                "A test",
+                "--aliases",
+                "test,testing",
+            ],
         )
         assert result.exit_code == 0
         assert "Created" in result.output
@@ -321,7 +357,10 @@ class TestCategoryCommand:
         """category delete should not work on predefined categories."""
         result = runner.invoke(app, ["category", "delete", "mathematics", "--force"])
         assert result.exit_code != 0
-        assert "cannot delete predefined" in result.output.lower() or "protected" in result.output.lower()
+        assert (
+            "cannot delete predefined" in result.output.lower()
+            or "protected" in result.output.lower()
+        )
 
     def test_category_edit(self, tmp_polymind, env_override):
         """category edit should update custom category."""
@@ -386,7 +425,7 @@ class TestSuiteEditCommands:
     def test_edit_suite(self, tmp_polymind, env_override):
         """suite edit should update suite metadata."""
         # Create a custom domain with a suite
-        from polymind.core.confidence.artifact import save_custom_domain, delete_custom_domain
+        from polymind.core.confidence.artifact import delete_custom_domain, save_custom_domain
         from polymind.core.confidence.types import Domain, TestSuite
 
         domain = Domain(
@@ -408,8 +447,17 @@ class TestSuiteEditCommands:
 
         result = runner.invoke(
             app,
-            ["suite", "edit", "edit_suite_test", "--name", "New Name", "--difficulty", "hard",
-             "--domain", "edit_test_domain"],
+            [
+                "suite",
+                "edit",
+                "edit_suite_test",
+                "--name",
+                "New Name",
+                "--difficulty",
+                "hard",
+                "--domain",
+                "edit_test_domain",
+            ],
         )
         assert result.exit_code == 0
         assert "Updated" in result.output
@@ -419,7 +467,7 @@ class TestSuiteEditCommands:
 
     def test_edit_question(self, tmp_polymind, env_override):
         """suite edit-question should update question fields."""
-        from polymind.core.confidence.artifact import save_custom_domain, delete_custom_domain
+        from polymind.core.confidence.artifact import delete_custom_domain, save_custom_domain
         from polymind.core.confidence.types import Domain, TestQuestion, TestSuite
 
         domain = Domain(
@@ -443,8 +491,17 @@ class TestSuiteEditCommands:
 
         result = runner.invoke(
             app,
-            ["suite", "edit-question", "eq_test_domain", "eq_suite", "q1",
-             "--prompt", "New prompt", "--expected", "New answer"],
+            [
+                "suite",
+                "edit-question",
+                "eq_test_domain",
+                "eq_suite",
+                "q1",
+                "--prompt",
+                "New prompt",
+                "--expected",
+                "New answer",
+            ],
         )
         assert result.exit_code == 0
         assert "Updated" in result.output
@@ -471,7 +528,9 @@ class TestCapabilityCommand:
         """capability show should display a matrix with scores."""
         from polymind.core.confidence.artifact import save_confidence
         from polymind.core.confidence.types import (
-            DomainScore, ModelConfidence, SuiteScore,
+            DomainScore,
+            ModelConfidence,
+            SuiteScore,
         )
 
         scores = {
@@ -507,9 +566,11 @@ class TestCapabilityCommand:
     def test_capability_json_output(self, tmp_polymind, env_override):
         """capability show --json should output valid JSON."""
         import json
+
         from polymind.core.confidence.artifact import save_confidence
         from polymind.core.confidence.types import (
-            DomainScore, ModelConfidence, SuiteScore,
+            DomainScore,
+            ModelConfidence,
         )
 
         scores = {
@@ -644,14 +705,18 @@ class TestSelectorDomainResolution:
 
     def test_selector_resolves_custom_domain(self, tmp_polymind, env_override):
         """Selector should resolve custom domain IDs for scoring."""
+        from polymind.core.model.registry import InstalledModel
         from polymind.core.pipeline.selector import _auto_select
         from polymind.core.pipeline.types import ModelRole
-        from polymind.core.model.registry import InstalledModel
 
         # Create a mock model
         model = InstalledModel(
-            id=1, repo_id="test/repo", filename="test.gguf",
-            local_path="/tmp/test.gguf", size_bytes=1024**3, quantization="Q4_K_M",
+            id=1,
+            repo_id="test/repo",
+            filename="test.gguf",
+            local_path="/tmp/test.gguf",
+            size_bytes=1024**3,
+            quantization="Q4_K_M",
         )
 
         # This should not crash even with no confidence data
@@ -662,13 +727,17 @@ class TestSelectorDomainResolution:
 
     def test_selector_handles_unknown_domain(self, tmp_polymind, env_override):
         """Selector should handle unknown domains gracefully."""
+        from polymind.core.model.registry import InstalledModel
         from polymind.core.pipeline.selector import _auto_select
         from polymind.core.pipeline.types import ModelRole
-        from polymind.core.model.registry import InstalledModel
 
         model = InstalledModel(
-            id=1, repo_id="test/repo", filename="test.gguf",
-            local_path="/tmp/test.gguf", size_bytes=1024**3, quantization="Q4_K_M",
+            id=1,
+            repo_id="test/repo",
+            filename="test.gguf",
+            local_path="/tmp/test.gguf",
+            size_bytes=1024**3,
+            quantization="Q4_K_M",
         )
 
         result = _auto_select("totally_unknown_domain_xyz", ModelRole.GENERATOR, [model])
@@ -694,7 +763,7 @@ class TestDecomposerDynamicDomains:
 
     def test_build_domain_list_includes_custom(self, tmp_polymind, env_override):
         """_build_domain_list should include custom domains."""
-        from polymind.core.confidence.artifact import save_custom_domain, delete_custom_domain
+        from polymind.core.confidence.artifact import delete_custom_domain, save_custom_domain
         from polymind.core.confidence.types import Domain
 
         domain = Domain(
@@ -715,7 +784,7 @@ class TestDecomposerDynamicDomains:
 
     def test_detect_domain_uses_registry(self, tmp_polymind, env_override):
         """_detect_domain should match against registered domain aliases."""
-        from polymind.core.confidence.artifact import save_custom_domain, delete_custom_domain
+        from polymind.core.confidence.artifact import delete_custom_domain, save_custom_domain
         from polymind.core.confidence.types import Domain
         from polymind.core.pipeline.decomposer import _detect_domain
 
@@ -829,7 +898,9 @@ class TestEvidenceMetadata:
         """Confidence data should survive save/load."""
         from polymind.core.confidence.artifact import load_confidence, save_confidence
         from polymind.core.confidence.types import (
-            DomainScore, ModelConfidence, SuiteScore,
+            DomainScore,
+            ModelConfidence,
+            SuiteScore,
         )
 
         scores = {
@@ -840,8 +911,12 @@ class TestEvidenceMetadata:
                         domain_id="frontend",
                         overall=88.5,
                         suites={
-                            "fe-core": SuiteScore(suite_id="fe-core", score=92.0, passed=9, total=10),
-                            "fe-arch": SuiteScore(suite_id="fe-arch", score=85.0, passed=8, total=10),
+                            "fe-core": SuiteScore(
+                                suite_id="fe-core", score=92.0, passed=9, total=10
+                            ),
+                            "fe-arch": SuiteScore(
+                                suite_id="fe-arch", score=85.0, passed=8, total=10
+                            ),
                         },
                     ),
                     "backend": DomainScore(

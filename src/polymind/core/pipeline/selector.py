@@ -26,6 +26,7 @@ from polymind.core.runtime.types import ValidationStatus
 @dataclass
 class RuntimeFeasibility:
     """Result of checking whether a model can safely run."""
+
     feasible: bool
     status: str  # ready, stale, no_profile, unsafe, unknown
     profile_workload: str = ""
@@ -61,6 +62,7 @@ def check_runtime_feasibility(
         )
 
     from polymind.core.runtime.types import HardwareFingerprint
+
     hw_fp = HardwareFingerprint.from_hardware_profile(hardware)
     hw_fp_hash = hw_fp.compute_hash()
 
@@ -81,7 +83,10 @@ def check_runtime_feasibility(
             reason=f"Profile marked FAILED: {', '.join(profile.validation.failure_reasons[:2])}",
         )
 
-    if profile.validation.status == ValidationStatus.READY and profile.validation.successful_runs > 0:
+    if (
+        profile.validation.status == ValidationStatus.READY
+        and profile.validation.successful_runs > 0
+    ):
         # Check hardware fingerprint
         hw_valid, hw_reason = _validate_hardware(profile, hw_fp_hash)
         if not hw_valid:
@@ -428,7 +433,9 @@ def suggest_models(
                     reasoning = conf.domains.get("reasoning", None)
                     if instr and reasoning:
                         score = (instr.overall + reasoning.overall) / 2
-                        reason = f"instruction={instr.overall:.0f}% reasoning={reasoning.overall:.0f}%"
+                        reason = (
+                            f"instruction={instr.overall:.0f}% reasoning={reasoning.overall:.0f}%"
+                        )
                     else:
                         score = conf.overall_score
                         reason = f"overall={conf.overall_score:.0f}%"

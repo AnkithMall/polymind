@@ -19,12 +19,8 @@ def run_callback(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed pipeline execution."
     ),
-    model_id: str = typer.Option(
-        "", "--model", "-m", help="Model ID for single-model quick run."
-    ),
-    json_output: bool = typer.Option(
-        False, "--json", help="Output result as JSON."
-    ),
+    model_id: str = typer.Option("", "--model", "-m", help="Model ID for single-model quick run."),
+    json_output: bool = typer.Option(False, "--json", help="Output result as JSON."),
 ) -> None:
     """Run a prompt through the pipeline (alias for 'pipeline run').
 
@@ -44,7 +40,7 @@ def run_callback(
 
     if not prompt:
         console.print("[red]Please provide a prompt.[/]")
-        console.print("Usage: polymind run \"your prompt here\"")
+        console.print('Usage: polymind run "your prompt here"')
         raise typer.Exit(code=1)
 
     if model_id:

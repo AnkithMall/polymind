@@ -156,11 +156,11 @@ def _detect_domain(prompt: str) -> str:
     domains = load_all_domains()
     for domain in domains:
         # Check domain ID (word boundary match)
-        if re.search(r'\b' + re.escape(domain.id.lower()) + r'\b', lower):
+        if re.search(r"\b" + re.escape(domain.id.lower()) + r"\b", lower):
             return domain.id
         # Check aliases (word boundary match to avoid "ui" matching "quick")
         for alias in domain.aliases:
-            if re.search(r'\b' + re.escape(alias.lower()) + r'\b', lower):
+            if re.search(r"\b" + re.escape(alias.lower()) + r"\b", lower):
                 return domain.id
 
     # Fallback: use built-in keyword heuristics

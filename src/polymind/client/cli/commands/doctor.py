@@ -80,7 +80,9 @@ def doctor_callback() -> None:
         if gguf_files:
             total_size = sum(f.stat().st_size for f in gguf_files)
             size_gb = total_size / (1024**3)
-            checks.append(("Model files", True, f"{len(gguf_files)} GGUF file(s), {size_gb:.1f} GB"))
+            checks.append(
+                ("Model files", True, f"{len(gguf_files)} GGUF file(s), {size_gb:.1f} GB")
+            )
         else:
             checks.append(("Model files", False, "No GGUF files found"))
     else:
@@ -109,10 +111,16 @@ def doctor_callback() -> None:
         for conf in confidence.values():
             domain_count.update(conf.domains.keys())
         checks.append(
-            ("Confidence scores", True, f"{len(confidence)} model(s), {len(domain_count)} domain(s)")
+            (
+                "Confidence scores",
+                True,
+                f"{len(confidence)} model(s), {len(domain_count)} domain(s)",
+            )
         )
     else:
-        checks.append(("Confidence scores", False, "Not computed. Run: polymind confidence compute"))
+        checks.append(
+            ("Confidence scores", False, "Not computed. Run: polymind confidence compute")
+        )
 
     # 7. Custom domains
     from polymind.core.paths import custom_domains_dir
