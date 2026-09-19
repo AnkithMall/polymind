@@ -13,6 +13,7 @@ from polymind.client.cli.commands import (
     pipeline,
     run,
     runtime,
+    skills,
     suite,
     tui,
 )
@@ -40,6 +41,7 @@ app.add_typer(category.app, name="category", help="Model categories.")
 app.add_typer(doctor.app, name="doctor", help="Diagnostics and health checks.")
 app.add_typer(tui.app, name="tui", help="Launch the text user interface.")
 app.add_typer(demo.app, name="demo", help="Demo preparation: seed custom domains and check status.")
+app.add_typer(skills.app, name="skills", help="Manage and use skills (tools) with local LLMs.")
 
 
 def main() -> None:
