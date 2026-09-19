@@ -31,9 +31,9 @@ from polymind.core.hardware.models import HardwareProfile
 from polymind.core.runtime.benchmark import (
     benchmark_candidate,
     get_available_gpu_memory_mb,
-    get_available_ram_mb,
 )
 from polymind.core.runtime.types import (
+    DEFAULT_WORKLOADS,
     BenchmarkMetrics,
     CandidateConfig,
     CandidateStatus,
@@ -46,11 +46,10 @@ from polymind.core.runtime.types import (
     ValidationInfo,
     ValidationStatus,
     WorkloadProfile,
-    DEFAULT_WORKLOADS,
 )
 
-
 # ── Layer estimation ───────────────────────────────────────────
+
 
 def _estimate_num_layers(model: ModelFingerprint, model_size_bytes: int) -> int:
     """Estimate total layer count from model metadata or heuristics."""
@@ -83,6 +82,7 @@ def _estimate_layer_size(model_size_bytes: int, num_layers: int) -> int:
 
 # ── Candidate Generation ──────────────────────────────────────
 
+
 def generate_placement_candidates(
     hardware: HardwareProfile,
 ) -> list[Placement]:
@@ -98,8 +98,7 @@ def generate_placement_candidates(
 
     # Get usable GPUs
     usable_gpus = [
-        gpu for gpu in hardware.gpus
-        if gpu.compute.llama_cpp_usable and gpu.selection.enabled
+        gpu for gpu in hardware.gpus if gpu.compute.llama_cpp_usable and gpu.selection.enabled
     ]
 
     if not usable_gpus:
@@ -223,6 +222,7 @@ def generate_batch_candidates() -> list[int]:
 
 # ── Memory estimation ──────────────────────────────────────────
 
+
 def estimate_memory_mb(
     model_size_bytes: int,
     num_layers: int,
@@ -277,6 +277,7 @@ def check_memory_feasibility(
 
 
 # ── Hierarchical Search Optimizer ──────────────────────────────
+
 
 class RuntimeOptimizer:
     """Adaptive hierarchical runtime optimizer.
@@ -335,7 +336,8 @@ class RuntimeOptimizer:
 
         # Best GPU info
         self.usable_gpus = [
-            gpu for gpu in self.hardware.gpus
+            gpu
+            for gpu in self.hardware.gpus
             if gpu.compute.llama_cpp_usable and gpu.selection.enabled
         ]
         self.best_gpu_total_vram_mb = 0.0
@@ -375,7 +377,7 @@ class RuntimeOptimizer:
             return self._build_fallback_profile()
 
         profile = self._build_profile(self._best_candidate)
-        self._emit(f"Selected best configuration", 6, 6)
+        self._emit("Selected best configuration", 6, 6)
         return profile
 
     def _filter_placements(self, placements: list[Placement]) -> list[Placement]:
@@ -440,16 +442,23 @@ class RuntimeOptimizer:
 
             # Memory pre-check
             est_memory = estimate_memory_mb(
-                self.model_size_bytes, self.num_layers, gpu_layers,
-                2048, 256,
-                self.model_fp.is_moe, self.model_fp.num_kv_heads, self.model_fp.embedding_dim,
+                self.model_size_bytes,
+                self.num_layers,
+                gpu_layers,
+                2048,
+                256,
+                self.model_fp.is_moe,
+                self.model_fp.num_kv_heads,
+                self.model_fp.embedding_dim,
             )
             candidate.estimated_memory_mb = est_memory
 
             if not is_cpu and available_vram > 0:
                 if not check_memory_feasibility(est_memory, available_vram):
                     candidate.status = CandidateStatus.UNSAFE
-                    candidate.failure_reason = f"Estimated {est_memory:.0f}MB > {available_vram:.0f}MB VRAM"
+                    candidate.failure_reason = (
+                        f"Estimated {est_memory:.0f}MB > {available_vram:.0f}MB VRAM"
+                    )
                     candidate.failure_type = "oom"
                     self._tested_candidates.append(candidate)
                     self._emit(f"  [gpu={gpu_layers}] SKIP (memory)", idx + 1, gpu_layer_total)
@@ -458,8 +467,11 @@ class RuntimeOptimizer:
             self._emit(f"  [gpu={gpu_layers}] scanning...", idx + 1, gpu_layer_total)
 
             candidate = benchmark_candidate(
-                self.model_path, candidate, self.workload,
-                repeat=quick_run, timeout=self.benchmark_timeout,
+                self.model_path,
+                candidate,
+                self.workload,
+                repeat=quick_run,
+                timeout=self.benchmark_timeout,
             )
             self._tested_candidates.append(candidate)
 
@@ -484,9 +496,14 @@ class RuntimeOptimizer:
                 placement=placement,
             )
             est_memory = estimate_memory_mb(
-                self.model_size_bytes, self.num_layers, working_gpu_layers,
-                ctx, 256,
-                self.model_fp.is_moe, self.model_fp.num_kv_heads, self.model_fp.embedding_dim,
+                self.model_size_bytes,
+                self.num_layers,
+                working_gpu_layers,
+                ctx,
+                256,
+                self.model_fp.is_moe,
+                self.model_fp.num_kv_heads,
+                self.model_fp.embedding_dim,
             )
             candidate.estimated_memory_mb = est_memory
 
@@ -497,8 +514,11 @@ class RuntimeOptimizer:
                     continue
 
             candidate = benchmark_candidate(
-                self.model_path, candidate, self.workload,
-                repeat=quick_run, timeout=self.benchmark_timeout,
+                self.model_path,
+                candidate,
+                self.workload,
+                repeat=quick_run,
+                timeout=self.benchmark_timeout,
             )
             self._tested_candidates.append(candidate)
 
@@ -523,8 +543,11 @@ class RuntimeOptimizer:
                 placement=placement,
             )
             candidate = benchmark_candidate(
-                self.model_path, candidate, self.workload,
-                repeat=quick_run, timeout=self.benchmark_timeout,
+                self.model_path,
+                candidate,
+                self.workload,
+                repeat=quick_run,
+                timeout=self.benchmark_timeout,
             )
             self._tested_candidates.append(candidate)
 
@@ -549,8 +572,11 @@ class RuntimeOptimizer:
                 placement=placement,
             )
             candidate = benchmark_candidate(
-                self.model_path, candidate, self.workload,
-                repeat=quick_run, timeout=self.benchmark_timeout,
+                self.model_path,
+                candidate,
+                self.workload,
+                repeat=quick_run,
+                timeout=self.benchmark_timeout,
             )
             self._tested_candidates.append(candidate)
 
@@ -573,17 +599,22 @@ class RuntimeOptimizer:
                 placement=best_overall.placement,
             )
             validated = benchmark_candidate(
-                self.model_path, validated, self.workload,
-                repeat=self.benchmark_runs, timeout=self.benchmark_timeout,
+                self.model_path,
+                validated,
+                self.workload,
+                repeat=self.benchmark_runs,
+                timeout=self.benchmark_timeout,
             )
             if validated.status == CandidateStatus.PASSED:
                 # Replace the quick-scan result with the validated one
                 for i, c in enumerate(self._tested_candidates):
-                    if (c.gpu_layers == validated.gpu_layers and
-                        c.threads == validated.threads and
-                        c.context_size == validated.context_size and
-                        c.batch_size == validated.batch_size and
-                        c.placement == placement):
+                    if (
+                        c.gpu_layers == validated.gpu_layers
+                        and c.threads == validated.threads
+                        and c.context_size == validated.context_size
+                        and c.batch_size == validated.batch_size
+                        and c.placement == placement
+                    ):
                         self._tested_candidates[i] = validated
                         break
 
@@ -641,9 +672,11 @@ class RuntimeOptimizer:
             failed_runs=0,
             last_validated=time.strftime("%Y-%m-%dT%H:%M:%S"),
         )
-        profile.safety_margin_mb = max(
-            0, self.best_gpu_total_vram_mb - candidate.peak_memory_mb
-        ) if self.best_gpu_total_vram_mb > 0 else 0
+        profile.safety_margin_mb = (
+            max(0, self.best_gpu_total_vram_mb - candidate.peak_memory_mb)
+            if self.best_gpu_total_vram_mb > 0
+            else 0
+        )
         return profile
 
     def _build_fallback_profile(self) -> RuntimeProfile:
@@ -714,6 +747,7 @@ class RuntimeOptimizer:
 
 # ── Public API ─────────────────────────────────────────────────
 
+
 def optimize_config(
     model_id: str,
     model_size_bytes: int,
@@ -750,7 +784,11 @@ def optimize_config(
 def get_benchmark_summary(results: list[Any]) -> str:
     """Format a summary of benchmark results (backward compatible)."""
     lines: list[str] = []
-    successful = [r for r in results if hasattr(r, "success") and r.success and hasattr(r, "run_count") and r.run_count > 0]
+    successful = [
+        r
+        for r in results
+        if hasattr(r, "success") and r.success and hasattr(r, "run_count") and r.run_count > 0
+    ]
     failed = [r for r in results if hasattr(r, "success") and not r.success]
 
     lines.append(f"Benchmark Results: {len(successful)} passed, {len(failed)} failed")

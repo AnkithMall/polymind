@@ -16,7 +16,6 @@ from polymind.core.confidence.artifact import (
     load_domain_by_id,
     save_custom_domain,
 )
-from polymind.core.confidence.suites import get_all_domains
 from polymind.core.confidence.types import Domain
 
 app = typer.Typer()
@@ -37,7 +36,9 @@ def _print_category(domain: Domain) -> None:
     console.print(f"    Suites:      {suite_count} ({q_count} questions)")
     if domain.suites:
         for s in domain.suites:
-            console.print(f"      - {s.id}: {s.name} ({s.difficulty}, {len(s.questions)} questions)")
+            console.print(
+                f"      - {s.id}: {s.name} ({s.difficulty}, {len(s.questions)} questions)"
+            )
     console.print()
 
 
@@ -180,7 +181,9 @@ def _interactive_delete() -> None:
         return
 
     if not domain.custom:
-        console.print(f"  [red]Cannot delete built-in category '{cat_id}'. Built-in categories are protected.[/]")
+        console.print(
+            f"  [red]Cannot delete built-in category '{cat_id}'. Built-in categories are protected.[/]"
+        )
         return
 
     confirm = input(f"  Delete '{cat_id}'? This cannot be undone. [y/N]: ").strip().lower()

@@ -10,11 +10,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-
 # ── Workload profiles ──────────────────────────────────────────
+
 
 class WorkloadType(StrEnum):
     """Recognized workload types for profile-specific optimization."""
+
     DECOMPOSER = "decomposer"
     GENERATOR = "generator"
     REGENERATOR = "regenerator"
@@ -31,12 +32,13 @@ class WorkloadProfile:
     Each workload defines a representative prompt, token ranges,
     and performance priorities that guide optimization decisions.
     """
+
     name: str
     description: str
     representative_prompt: str
     min_context: int = 2048
     target_output_tokens: int = 256
-    latency_priority: float = 0.5   # 0.0 = throughput, 1.0 = latency
+    latency_priority: float = 0.5  # 0.0 = throughput, 1.0 = latency
     throughput_priority: float = 0.5
 
     def to_dict(self) -> dict[str, Any]:
@@ -53,6 +55,7 @@ class WorkloadProfile:
 
 # ── Placement ──────────────────────────────────────────────────
 
+
 class SplitMode(StrEnum):
     NONE = "none"
     LAYER = "layer"
@@ -62,6 +65,7 @@ class SplitMode(StrEnum):
 @dataclass
 class Placement:
     """Describes where and how a model executes."""
+
     backend: str = "cpu"
     devices: list[int] = field(default_factory=list)
     split_mode: SplitMode = SplitMode.NONE
@@ -82,9 +86,11 @@ class Placement:
 
 # ── Benchmark metrics ──────────────────────────────────────────
 
+
 @dataclass
 class BenchmarkMetrics:
     """Measured performance metrics from benchmark runs."""
+
     load_time_ms: float = 0.0
     prompt_tokens_per_sec: float = 0.0
     generation_tokens_per_sec: float = 0.0
@@ -93,7 +99,7 @@ class BenchmarkMetrics:
     peak_vram_mb: float = 0.0
     peak_ram_mb: float = 0.0
     warmup_time_ms: float = 0.0
-    stability: float = 0.0       # successful_runs / total_runs
+    stability: float = 0.0  # successful_runs / total_runs
     runs: int = 0
     benchmark_timestamp: str = ""
 
@@ -115,6 +121,7 @@ class BenchmarkMetrics:
 
 # ── Validation status ─────────────────────────────────────────
 
+
 class ValidationStatus(StrEnum):
     READY = "ready"
     STALE = "stale"
@@ -125,6 +132,7 @@ class ValidationStatus(StrEnum):
 @dataclass
 class ValidationInfo:
     """Tracks whether a profile has been validated and is still safe."""
+
     status: ValidationStatus = ValidationStatus.UNKNOWN
     successful_runs: int = 0
     failed_runs: int = 0
@@ -151,6 +159,7 @@ class ValidationInfo:
 
 # ── Runtime config (backward compatible) ───────────────────────
 
+
 @dataclass
 class RuntimeConfig:
     """Minimal runtime config — backward compatible with legacy runtime.yaml.
@@ -159,6 +168,7 @@ class RuntimeConfig:
     produces a full RuntimeProfile which is then lowered to a RuntimeConfig
     for execution.
     """
+
     model_id: str
 
     gpu_layers: int = -1
@@ -184,6 +194,7 @@ class RuntimeConfig:
 
 # ── Full runtime profile ───────────────────────────────────────
 
+
 @dataclass
 class RuntimeProfile:
     """Complete runtime profile with fingerprints, placement, and validation.
@@ -191,6 +202,7 @@ class RuntimeProfile:
     Stored in runtime.yaml. Backward compatible — legacy profiles are
     loaded as RuntimeConfig and upgraded when optimize runs.
     """
+
     model_id: str
 
     # Fingerprints (for staleness detection)
@@ -263,6 +275,7 @@ class RuntimeProfile:
 
 # ── Candidate configuration for optimization ───────────────────
 
+
 class CandidateStatus(StrEnum):
     PENDING = "pending"
     TESTING = "testing"
@@ -274,6 +287,7 @@ class CandidateStatus(StrEnum):
 @dataclass
 class CandidateConfig:
     """A candidate configuration to benchmark during optimization."""
+
     # Execution
     gpu_layers: int = 0
     threads: int = 4
@@ -320,9 +334,13 @@ class CandidateConfig:
             ubatch_size=self.ubatch_size,
             benchmark=self.metrics,
             validation=ValidationInfo(
-                status=ValidationStatus.READY if self.status == CandidateStatus.PASSED else ValidationStatus.UNKNOWN,
+                status=ValidationStatus.READY
+                if self.status == CandidateStatus.PASSED
+                else ValidationStatus.UNKNOWN,
                 successful_runs=1 if self.status == CandidateStatus.PASSED else 0,
-                failed_runs=1 if self.status in (CandidateStatus.FAILED, CandidateStatus.UNSAFE) else 0,
+                failed_runs=1
+                if self.status in (CandidateStatus.FAILED, CandidateStatus.UNSAFE)
+                else 0,
             ),
             estimated_memory_mb=self.estimated_memory_mb,
             actual_peak_memory_mb=self.peak_memory_mb,
@@ -331,9 +349,11 @@ class CandidateConfig:
 
 # ── Benchmark subprocess result ────────────────────────────────
 
+
 @dataclass
 class SubprocessBenchmarkResult:
     """Result returned from an isolated benchmark subprocess."""
+
     success: bool
     load_time_ms: float = 0.0
     prompt_tokens_per_sec: float = 0.0
@@ -366,9 +386,11 @@ class SubprocessBenchmarkResult:
 
 # ── Hardware fingerprint ───────────────────────────────────────
 
+
 @dataclass
 class HardwareFingerprint:
     """Compact representation of hardware state for profile matching."""
+
     cpu_model: str = ""
     cpu_cores: int = 0
     total_ram_bytes: int = 0
@@ -381,6 +403,7 @@ class HardwareFingerprint:
     def compute_hash(self) -> str:
         """Compute a stable fingerprint hash."""
         import hashlib
+
         parts = [
             self.cpu_model,
             str(self.cpu_cores),
@@ -460,10 +483,10 @@ def _read_gguf_header_metadata(model_path: Any) -> dict[str, Any]:
             return {}
 
         # Version
-        version = struct.unpack("<I", f.read(4))[0]
+        _version = struct.unpack("<I", f.read(4))[0]
 
         # Tensor count and metadata kv count
-        n_tensors = struct.unpack("<Q", f.read(8))[0]
+        _n_tensors = struct.unpack("<Q", f.read(8))[0]
         n_kv = struct.unpack("<Q", f.read(8))[0]
 
         metadata: dict[str, Any] = {}
@@ -510,9 +533,11 @@ def _read_gguf_header_metadata(model_path: Any) -> dict[str, Any]:
 
 # ── Model fingerprint ──────────────────────────────────────────
 
+
 @dataclass
 class ModelFingerprint:
     """Compact representation of a model's characteristics."""
+
     file_size: int = 0
     architecture: str = ""
     num_layers: int = 0
@@ -527,6 +552,7 @@ class ModelFingerprint:
 
     def compute_hash(self) -> str:
         import hashlib
+
         parts = [
             str(self.file_size),
             self.architecture,
@@ -540,7 +566,9 @@ class ModelFingerprint:
         return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
     @classmethod
-    def from_model_file(cls, model_path: Any, file_size: int, quantization: str = "") -> ModelFingerprint:
+    def from_model_file(
+        cls, model_path: Any, file_size: int, quantization: str = ""
+    ) -> ModelFingerprint:
         """Build fingerprint by reading GGUF metadata if possible."""
         fp = cls(
             file_size=file_size,
@@ -614,7 +642,8 @@ DEFAULT_WORKLOADS: dict[str, WorkloadProfile] = {
     "long_context": WorkloadProfile(
         name="long_context",
         description="Long context analysis workload",
-        representative_prompt="Analyze the following code and identify all bugs:\n\n" + ("def f(x): return x * 2\n" * 200),
+        representative_prompt="Analyze the following code and identify all bugs:\n\n"
+        + ("def f(x): return x * 2\n" * 200),
         min_context=4096,
         target_output_tokens=512,
         latency_priority=0.3,

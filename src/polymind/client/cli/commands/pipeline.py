@@ -66,7 +66,10 @@ def _check_artifacts() -> dict[str, tuple[bool, str]]:
         if rt_models:
             artifacts["runtime"] = (True, f"{len(rt_models)} model(s) configured")
         else:
-            artifacts["runtime"] = (False, "No runtime configs — run: polymind runtime optimize --all")
+            artifacts["runtime"] = (
+                False,
+                "No runtime configs — run: polymind runtime optimize --all",
+            )
     else:
         artifacts["runtime"] = (False, "No runtime config — run: polymind runtime optimize --all")
 
@@ -131,7 +134,9 @@ def _prompt_missing_artifacts(artifacts: dict[str, tuple[bool, str]]) -> bool:
 
     if "runtime" in missing:
         console.print("  Running runtime optimization (this may take a few minutes)...")
-        subprocess.run(["uv", "run", "polymind", "runtime", "optimize", "--all"], capture_output=False)
+        subprocess.run(
+            ["uv", "run", "polymind", "runtime", "optimize", "--all"], capture_output=False
+        )
 
     if "confidence" in missing:
         console.print("  Running confidence evaluation...")
@@ -244,13 +249,11 @@ def _verbose_progress(event: str, task, start_time: float = 0.0) -> None:
             # Show assignment summary
             console.print()
             console.print("[bold]Assignments:[/]")
-            for tid, a in assignments.items():
+            for _tid, a in assignments.items():
                 domain = a.get("domain", "?")
                 model = a.get("model_id", "?")
                 score = a.get("confidence", "?")
-                console.print(
-                    f"  {domain:<18} -> {model:<12} score {score}"
-                )
+                console.print(f"  {domain:<18} -> {model:<12} score {score}")
 
     elif event == "schedule":
         groups = task.metadata.get("groups", [])

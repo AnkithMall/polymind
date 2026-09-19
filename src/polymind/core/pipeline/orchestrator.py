@@ -197,9 +197,7 @@ class Pipeline:
                 }
 
                 if runtime_status not in ("ready", "stale"):
-                    self._warnings.append(
-                        f"Model {a.model_id} runtime status: {runtime_status}"
-                    )
+                    self._warnings.append(f"Model {a.model_id} runtime status: {runtime_status}")
             else:
                 self._warnings.append(f"No model found for task {task.id} ({task.domain})")
 

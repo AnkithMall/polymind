@@ -167,7 +167,10 @@ class TestRuntimeTypes:
     def test_runtime_config_to_dict(self):
         """RuntimeConfig.to_dict should produce expected keys."""
         from polymind.core.runtime.types import RuntimeConfig
-        config = RuntimeConfig(model_id="1", gpu_layers=0, threads=4, context_size=2048, batch_size=256)
+
+        config = RuntimeConfig(
+            model_id="1", gpu_layers=0, threads=4, context_size=2048, batch_size=256
+        )
         d = config.to_dict()
         assert d["model_id"] == "1"
         assert d["gpu_layers"] == 0
@@ -176,6 +179,7 @@ class TestRuntimeTypes:
     def test_runtime_config_with_benchmark(self):
         """RuntimeConfig with benchmark metadata."""
         from polymind.core.runtime.types import RuntimeConfig
+
         config = RuntimeConfig(
             model_id="2",
             benchmark={"generation_tps": 11.9, "prompt_tps": 18.2, "runs": 3},
@@ -186,7 +190,14 @@ class TestRuntimeTypes:
 
     def test_runtime_profile_to_dict(self):
         """RuntimeProfile.to_dict should produce complete output."""
-        from polymind.core.runtime.types import RuntimeProfile, Placement, BenchmarkMetrics, ValidationInfo, ValidationStatus
+        from polymind.core.runtime.types import (
+            BenchmarkMetrics,
+            Placement,
+            RuntimeProfile,
+            ValidationInfo,
+            ValidationStatus,
+        )
+
         profile = RuntimeProfile(
             model_id="1",
             hardware_fingerprint="abc123",
@@ -217,7 +228,8 @@ class TestRuntimeTypes:
 
     def test_runtime_profile_to_runtime_config(self):
         """RuntimeProfile.to_runtime_config should lower correctly."""
-        from polymind.core.runtime.types import RuntimeProfile, BenchmarkMetrics
+        from polymind.core.runtime.types import BenchmarkMetrics, RuntimeProfile
+
         profile = RuntimeProfile(
             model_id="3",
             gpu_layers=8,
@@ -234,6 +246,7 @@ class TestRuntimeTypes:
     def test_candidate_config_to_runtime_config(self):
         """CandidateConfig.to_runtime_config conversion."""
         from polymind.core.runtime.types import CandidateConfig
+
         cand = CandidateConfig(gpu_layers=12, threads=6, context_size=4096, batch_size=256)
         config = cand.to_runtime_config("5")
         assert config.model_id == "5"
@@ -242,6 +255,7 @@ class TestRuntimeTypes:
     def test_candidate_config_to_profile(self):
         """CandidateConfig.to_profile conversion."""
         from polymind.core.runtime.types import CandidateConfig, CandidateStatus
+
         cand = CandidateConfig(
             gpu_layers=8,
             threads=4,
@@ -257,6 +271,7 @@ class TestRuntimeTypes:
     def test_candidate_status_values(self):
         """CandidateStatus has all expected values."""
         from polymind.core.runtime.types import CandidateStatus
+
         values = [s.value for s in CandidateStatus]
         assert "pending" in values
         assert "testing" in values
@@ -267,6 +282,7 @@ class TestRuntimeTypes:
     def test_workload_profiles_exist(self):
         """DEFAULT_WORKLOADS contains expected workload types."""
         from polymind.core.runtime.types import DEFAULT_WORKLOADS
+
         assert "decomposer" in DEFAULT_WORKLOADS
         assert "generator" in DEFAULT_WORKLOADS
         assert "interactive" in DEFAULT_WORKLOADS
@@ -276,6 +292,7 @@ class TestRuntimeTypes:
     def test_workload_profile_to_dict(self):
         """WorkloadProfile.to_dict works."""
         from polymind.core.runtime.types import DEFAULT_WORKLOADS
+
         wl = DEFAULT_WORKLOADS["decomposer"]
         d = wl.to_dict()
         assert d["name"] == "decomposer"
@@ -289,6 +306,7 @@ class TestHardwareFingerprint:
         """HardwareFingerprint.from_hardware_profile produces a valid fingerprint."""
         from polymind.core.hardware.loader import load_hardware_profile
         from polymind.core.runtime.types import HardwareFingerprint
+
         hw = load_hardware_profile()
         fp = HardwareFingerprint.from_hardware_profile(hw)
         assert fp.cpu_model  # Should have some value
@@ -299,6 +317,7 @@ class TestHardwareFingerprint:
         """Same hardware produces the same fingerprint hash."""
         from polymind.core.hardware.loader import load_hardware_profile
         from polymind.core.runtime.types import HardwareFingerprint
+
         hw = load_hardware_profile()
         fp1 = HardwareFingerprint.from_hardware_profile(hw)
         fp2 = HardwareFingerprint.from_hardware_profile(hw)
@@ -308,6 +327,7 @@ class TestHardwareFingerprint:
         """Fingerprint hash is a hex string."""
         from polymind.core.hardware.loader import load_hardware_profile
         from polymind.core.runtime.types import HardwareFingerprint
+
         hw = load_hardware_profile()
         fp = HardwareFingerprint.from_hardware_profile(hw)
         h = fp.compute_hash()
@@ -322,6 +342,7 @@ class TestModelFingerprint:
     def test_model_fingerprint_from_file(self, tmp_polymind, env_override, mock_gguf):
         """ModelFingerprint.from_model_file works with a file."""
         from polymind.core.runtime.types import ModelFingerprint
+
         fp = ModelFingerprint.from_model_file(mock_gguf, 1024, "Q4_K_M")
         assert fp.file_size == 1024
         assert fp.quantization == "Q4_K_M"
@@ -329,6 +350,7 @@ class TestModelFingerprint:
     def test_model_fingerprint_hash(self, tmp_polymind, env_override):
         """ModelFingerprint.compute_hash produces a valid hash."""
         from polymind.core.runtime.types import ModelFingerprint
+
         fp = ModelFingerprint(file_size=1_000_000_000, architecture="llama", num_layers=32)
         h = fp.compute_hash()
         assert isinstance(h, str)
@@ -337,6 +359,7 @@ class TestModelFingerprint:
     def test_model_fingerprint_different_sizes_different_hashes(self):
         """Different file sizes produce different hashes."""
         from polymind.core.runtime.types import ModelFingerprint
+
         fp1 = ModelFingerprint(file_size=1_000_000_000)
         fp2 = ModelFingerprint(file_size=2_000_000_000)
         assert fp1.compute_hash() != fp2.compute_hash()
@@ -348,6 +371,7 @@ class TestPlacement:
     def test_placement_to_dict(self):
         """Placement.to_dict produces expected output."""
         from polymind.core.runtime.types import Placement, SplitMode
+
         p = Placement(backend="cuda", devices=[0, 1], split_mode=SplitMode.LAYER, main_gpu=0)
         d = p.to_dict()
         assert d["backend"] == "cuda"
@@ -358,6 +382,7 @@ class TestPlacement:
     def test_placement_cpu_only(self):
         """CPU-only placement."""
         from polymind.core.runtime.types import Placement
+
         p = Placement(backend="cpu", devices=[])
         d = p.to_dict()
         assert d["backend"] == "cpu"
@@ -366,6 +391,7 @@ class TestPlacement:
     def test_split_mode_values(self):
         """SplitMode has expected values."""
         from polymind.core.runtime.types import SplitMode
+
         values = [s.value for s in SplitMode]
         assert "none" in values
         assert "layer" in values
@@ -378,6 +404,7 @@ class TestMemoryEstimation:
     def test_estimate_memory_small_model(self):
         """Small model memory estimation."""
         from polymind.core.runtime.optimizer import estimate_memory_mb
+
         mem = estimate_memory_mb(
             model_size_bytes=1_000_000_000,
             num_layers=32,
@@ -392,6 +419,7 @@ class TestMemoryEstimation:
     def test_estimate_memory_full_gpu_offload(self):
         """Full GPU offload should use more VRAM."""
         from polymind.core.runtime.optimizer import estimate_memory_mb
+
         mem_cpu = estimate_memory_mb(
             model_size_bytes=1_000_000_000,
             num_layers=32,
@@ -411,6 +439,7 @@ class TestMemoryEstimation:
     def test_estimate_memory_increases_with_context(self):
         """Larger context should use more memory."""
         from polymind.core.runtime.optimizer import estimate_memory_mb
+
         mem_small = estimate_memory_mb(
             model_size_bytes=1_000_000_000,
             num_layers=32,
@@ -430,6 +459,7 @@ class TestMemoryEstimation:
     def test_check_memory_feasibility(self):
         """Memory feasibility check."""
         from polymind.core.runtime.optimizer import check_memory_feasibility
+
         assert check_memory_feasibility(500, 2000) is True
         assert check_memory_feasibility(500, 400) is False
         assert check_memory_feasibility(500, 0) is False
@@ -441,6 +471,7 @@ class TestCandidateGeneration:
     def test_generate_thread_candidates(self):
         """Thread candidates are generated from CPU topology."""
         from polymind.core.runtime.optimizer import generate_thread_candidates
+
         candidates = generate_thread_candidates(physical_cores=6, logical_cores=12)
         assert len(candidates) >= 3
         assert 1 in candidates
@@ -449,6 +480,7 @@ class TestCandidateGeneration:
     def test_generate_context_candidates(self):
         """Context candidates respect model size constraints."""
         from polymind.core.runtime.optimizer import generate_context_candidates
+
         # Very large model (>15GB) — should limit max context to 2048
         candidates = generate_context_candidates(model_size_bytes=16_000_000_000)
         assert all(c <= 2048 for c in candidates)
@@ -459,6 +491,7 @@ class TestCandidateGeneration:
     def test_generate_batch_candidates(self):
         """Batch candidates include standard sizes."""
         from polymind.core.runtime.optimizer import generate_batch_candidates
+
         candidates = generate_batch_candidates()
         assert 128 in candidates
         assert 256 in candidates
@@ -468,8 +501,11 @@ class TestCandidateGeneration:
         """No VRAM means only CPU candidates."""
         from polymind.core.runtime.optimizer import generate_gpu_layer_candidates
         from polymind.core.runtime.types import Placement
+
         candidates = generate_gpu_layer_candidates(
-            num_layers=32, available_vram_bytes=0, layer_size=30_000_000,
+            num_layers=32,
+            available_vram_bytes=0,
+            layer_size=30_000_000,
             placement=Placement(backend="cpu"),
         )
         assert candidates == [0]
@@ -478,6 +514,7 @@ class TestCandidateGeneration:
         """With VRAM, should generate offload candidates."""
         from polymind.core.runtime.optimizer import generate_gpu_layer_candidates
         from polymind.core.runtime.types import Placement
+
         candidates = generate_gpu_layer_candidates(
             num_layers=32,
             available_vram_bytes=2_000_000_000,  # 2GB
@@ -491,6 +528,7 @@ class TestCandidateGeneration:
         """Placement candidates include CPU and GPU."""
         from polymind.core.hardware.loader import load_hardware_profile
         from polymind.core.runtime.optimizer import generate_placement_candidates
+
         hw = load_hardware_profile()
         candidates = generate_placement_candidates(hw)
         backends = [c.backend for c in candidates]
@@ -505,12 +543,14 @@ class TestSubprocessBenchmark:
         """BenchmarkFailure class works."""
         from polymind.core.runtime.benchmark import BenchmarkFailure
         from polymind.core.runtime.types import RuntimeConfig
+
         bf = BenchmarkFailure("test error", RuntimeConfig(model_id="1"))
         assert "test error" in repr(bf)
 
     def test_signal_name_conversion(self):
         """Signal name conversion works."""
-        from polymind.core.runtime.benchmark import _signal_name, _classify_exit_code
+        from polymind.core.runtime.benchmark import _classify_exit_code
+
         assert _classify_exit_code(-6) == "cuda_error"
         assert _classify_exit_code(-11) == "crash"
         assert _classify_exit_code(-9) == "timeout"
@@ -519,6 +559,7 @@ class TestSubprocessBenchmark:
     def test_benchmark_metrics_to_dict(self):
         """BenchmarkMetrics.to_dict works."""
         from polymind.core.runtime.types import BenchmarkMetrics
+
         m = BenchmarkMetrics(
             generation_tokens_per_sec=11.9,
             prompt_tokens_per_sec=18.2,
@@ -532,6 +573,7 @@ class TestSubprocessBenchmark:
     def test_subprocess_result_to_dict(self):
         """SubprocessBenchmarkResult.to_dict works."""
         from polymind.core.runtime.types import SubprocessBenchmarkResult
+
         r = SubprocessBenchmarkResult(
             success=False,
             error="OOM",
@@ -544,6 +586,7 @@ class TestSubprocessBenchmark:
     def test_validation_status_values(self):
         """ValidationStatus has expected values."""
         from polymind.core.runtime.types import ValidationStatus
+
         values = [v.value for v in ValidationStatus]
         assert "ready" in values
         assert "stale" in values
@@ -553,6 +596,7 @@ class TestSubprocessBenchmark:
     def test_validation_info_is_usable(self):
         """ValidationInfo.is_usable checks correctly."""
         from polymind.core.runtime.types import ValidationInfo, ValidationStatus
+
         v = ValidationInfo(status=ValidationStatus.READY, successful_runs=3)
         assert v.is_usable is True
 
@@ -568,8 +612,15 @@ class TestProfilePersistence:
 
     def test_write_and_load_profile(self, tmp_polymind, env_override):
         """Write and load a RuntimeProfile."""
-        from polymind.core.runtime.types import RuntimeProfile, Placement, BenchmarkMetrics, ValidationInfo, ValidationStatus
-        from polymind.core.runtime.artifact import write_runtime_profile, load_runtime_profile
+        from polymind.core.runtime.artifact import load_runtime_profile, write_runtime_profile
+        from polymind.core.runtime.types import (
+            BenchmarkMetrics,
+            Placement,
+            RuntimeProfile,
+            ValidationInfo,
+            ValidationStatus,
+        )
+
         runtime_yaml = tmp_polymind / ".polymind" / "runtime.yaml"
 
         profile = RuntimeProfile(
@@ -610,8 +661,9 @@ class TestProfilePersistence:
 
     def test_write_profile_preserves_other_models(self, tmp_polymind, env_override):
         """Writing one model's profile doesn't delete others."""
+        from polymind.core.runtime.artifact import load_runtime_profile, write_runtime_profile
         from polymind.core.runtime.types import RuntimeProfile, ValidationInfo, ValidationStatus
-        from polymind.core.runtime.artifact import write_runtime_profile, load_runtime_profile
+
         runtime_yaml = tmp_polymind / ".polymind" / "runtime.yaml"
 
         # Write model 1
@@ -640,8 +692,9 @@ class TestProfilePersistence:
 
     def test_load_legacy_profile(self, tmp_polymind, env_override):
         """Legacy v1 profile loads as a STALE RuntimeProfile."""
-        from polymind.core.runtime.types import ValidationStatus
         from polymind.core.runtime.artifact import load_runtime_profile
+        from polymind.core.runtime.types import ValidationStatus
+
         runtime_yaml = tmp_polymind / ".polymind" / "runtime.yaml"
         runtime_yaml.write_text(
             """version: 1
@@ -663,18 +716,22 @@ models:
     def test_load_profile_not_found(self, tmp_polymind, env_override):
         """Loading non-existent model returns None."""
         from polymind.core.runtime.artifact import load_runtime_profile
+
         runtime_yaml = tmp_polymind / ".polymind" / "runtime.yaml"
         runtime_yaml.write_text("version: 2\nmodels: {}\n", encoding="utf-8")
         assert load_runtime_profile("999", runtime_yaml) is None
 
     def test_profile_validation_functions(self, tmp_polymind, env_override):
         """Hardware/model validation functions work."""
-        from polymind.core.runtime.types import RuntimeProfile
         from polymind.core.runtime.artifact import (
             validate_profile_for_current_hardware,
             validate_profile_for_current_model,
         )
-        profile = RuntimeProfile(model_id="1", hardware_fingerprint="abc123", model_fingerprint="def456")
+        from polymind.core.runtime.types import RuntimeProfile
+
+        profile = RuntimeProfile(
+            model_id="1", hardware_fingerprint="abc123", model_fingerprint="def456"
+        )
 
         valid, reason = validate_profile_for_current_hardware(profile, "abc123")
         assert valid is True
@@ -691,8 +748,9 @@ models:
 
     def test_legacy_profile_has_no_fingerprint(self, tmp_polymind, env_override):
         """Legacy profile with no fingerprint is treated as compatible."""
-        from polymind.core.runtime.types import RuntimeProfile
         from polymind.core.runtime.artifact import validate_profile_for_current_hardware
+        from polymind.core.runtime.types import RuntimeProfile
+
         profile = RuntimeProfile(model_id="1", hardware_fingerprint="")
         valid, reason = validate_profile_for_current_hardware(profile, "any_hash")
         assert valid is True
@@ -739,20 +797,29 @@ class TestRegressionModelsPreserved:
 
     def test_update_model_2_preserves_1_and_3(self, tmp_polymind, env_override):
         """Writing config for model 2 must not delete models 1 and 3."""
-        from polymind.core.runtime.artifact import write_runtime_config, load_runtime_config
+        from polymind.core.runtime.artifact import load_runtime_config, write_runtime_config
         from polymind.core.runtime.types import RuntimeConfig
+
         runtime_yaml = tmp_polymind / ".polymind" / "runtime.yaml"
 
         # Write all three models
         for i in range(1, 4):
             write_runtime_config(
-                RuntimeConfig(model_id=str(i), gpu_layers=i * 2, threads=i + 2, context_size=2048, batch_size=256),
+                RuntimeConfig(
+                    model_id=str(i),
+                    gpu_layers=i * 2,
+                    threads=i + 2,
+                    context_size=2048,
+                    batch_size=256,
+                ),
                 runtime_yaml,
             )
 
         # Update only model 2
         write_runtime_config(
-            RuntimeConfig(model_id="2", gpu_layers=99, threads=99, context_size=4096, batch_size=512),
+            RuntimeConfig(
+                model_id="2", gpu_layers=99, threads=99, context_size=4096, batch_size=512
+            ),
             runtime_yaml,
         )
 

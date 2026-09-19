@@ -17,13 +17,13 @@ from polymind.core.runtime.artifact import (
 )
 from polymind.core.runtime.benchmark import get_available_gpu_memory_mb, get_available_ram_mb
 from polymind.core.runtime.config import default_runtime_config
-from polymind.core.runtime.optimizer import RuntimeOptimizer, optimize_config
+from polymind.core.runtime.optimizer import RuntimeOptimizer
 from polymind.core.runtime.runner import RuntimeRunner
 from polymind.core.runtime.types import (
+    DEFAULT_WORKLOADS,
     HardwareFingerprint,
     ModelFingerprint,
     ValidationStatus,
-    DEFAULT_WORKLOADS,
 )
 
 app = typer.Typer()
@@ -82,23 +82,32 @@ def run(
 @app.command("optimize")
 def optimize(
     model: int | None = typer.Option(
-        None, "--model", "-m",
+        None,
+        "--model",
+        "-m",
         help="Model ID (number) to benchmark and optimize.",
     ),
     all_models: bool = typer.Option(
-        False, "--all",
+        False,
+        "--all",
         help="Benchmark and optimize all installed models.",
     ),
     workload: str = typer.Option(
-        "default", "--workload", "-w",
+        "default",
+        "--workload",
+        "-w",
         help="Workload profile: default, decomposer, generator, interactive, long_context, all.",
     ),
     force: bool = typer.Option(
-        False, "--force", "-f",
+        False,
+        "--force",
+        "-f",
         help="Force re-optimization even if a valid profile exists.",
     ),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v",
+        False,
+        "--verbose",
+        "-v",
         help="Show detailed optimization output.",
     ),
 ) -> None:
@@ -158,8 +167,7 @@ def optimize(
         workload_names = [workload]
     else:
         typer.echo(
-            f"Unknown workload: {workload}. "
-            f"Available: {', '.join(DEFAULT_WORKLOADS.keys())}, all",
+            f"Unknown workload: {workload}. Available: {', '.join(DEFAULT_WORKLOADS.keys())}, all",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -168,12 +176,13 @@ def optimize(
     typer.echo()
     typer.echo("═══ Hardware ═══")
     typer.echo(f"  CPU:     {hardware.cpu.model}")
-    typer.echo(f"  Cores:   {hardware.cpu.physical_cores} physical / {hardware.cpu.logical_cores} logical")
+    typer.echo(
+        f"  Cores:   {hardware.cpu.physical_cores} physical / {hardware.cpu.logical_cores} logical"
+    )
     typer.echo(f"  RAM:     {format_size(hardware.memory.total_bytes)}")
 
     selected_gpus = [
-        gpu for gpu in hardware.gpus
-        if gpu.selection.enabled and gpu.compute.llama_cpp_usable
+        gpu for gpu in hardware.gpus if gpu.selection.enabled and gpu.compute.llama_cpp_usable
     ]
     if selected_gpus:
         for gpu in selected_gpus:
@@ -229,6 +238,7 @@ def optimize(
                         existing, model_fp.compute_hash()
                     )
                     from polymind.core.runtime.types import ValidationStatus
+
                     status_ok = existing.validation.status == ValidationStatus.READY
 
                     if hw_ok and model_ok and status_ok:
@@ -277,21 +287,23 @@ def optimize(
             # Show results
             typer.echo()
             if profile.benchmark.runs > 0:
-                typer.echo(f"    Result: PASS")
+                typer.echo("    Result: PASS")
                 typer.echo(f"    Backend:    {profile.placement.backend}")
                 typer.echo(f"    GPU layers: {profile.gpu_layers}")
                 typer.echo(f"    Threads:    {profile.threads}")
                 typer.echo(f"    Context:    {profile.context_size}")
                 typer.echo(f"    Batch:      {profile.batch_size}")
-                typer.echo(f"    Gen speed:  {profile.benchmark.generation_tokens_per_sec:.1f} tok/s")
+                typer.echo(
+                    f"    Gen speed:  {profile.benchmark.generation_tokens_per_sec:.1f} tok/s"
+                )
                 typer.echo(f"    Prompt:     {profile.benchmark.prompt_tokens_per_sec:.1f} tok/s")
                 typer.echo(f"    Stability:  {profile.benchmark.stability:.0%}")
                 typer.echo(f"    Peak VRAM:  {profile.benchmark.peak_vram_mb:.0f} MB")
                 typer.echo(f"    Safety:     {profile.safety_margin_mb:.0f} MB headroom")
             else:
-                typer.echo(f"    Result: FALLBACK (all benchmarks failed)")
-                typer.echo(f"    Using conservative CPU config")
-                typer.echo(f"    GPU layers: 0")
+                typer.echo("    Result: FALLBACK (all benchmarks failed)")
+                typer.echo("    Using conservative CPU config")
+                typer.echo("    GPU layers: 0")
                 typer.echo(f"    Threads:    {profile.threads}")
                 typer.echo(f"    Context:    {profile.context_size}")
 
@@ -311,7 +323,9 @@ def optimize(
 @app.command("show")
 def show(
     model: str = typer.Option(
-        ..., "--model", "-m",
+        ...,
+        "--model",
+        "-m",
         help="Model ID (number) to show runtime config for.",
     ),
 ) -> None:
@@ -347,17 +361,19 @@ def show(
     # Validation status
     status = profile.validation.status.value
     if status == "ready":
-        typer.echo(f"  Status:      ✓ READY")
+        typer.echo("  Status:      ✓ READY")
     elif status == "stale":
-        typer.echo(f"  Status:      ⚠ STALE (revalidation needed)")
+        typer.echo("  Status:      ⚠ STALE (revalidation needed)")
     elif status == "failed":
-        typer.echo(f"  Status:      ✗ FAILED")
+        typer.echo("  Status:      ✗ FAILED")
     else:
-        typer.echo(f"  Status:      ? UNKNOWN")
+        typer.echo("  Status:      ? UNKNOWN")
 
     typer.echo(f"  Workload:    {profile.workload}")
     typer.echo(f"  Validated:   {profile.validation.last_validated or 'never'}")
-    typer.echo(f"  Runs:        {profile.validation.successful_runs} ok / {profile.validation.failed_runs} failed")
+    typer.echo(
+        f"  Runs:        {profile.validation.successful_runs} ok / {profile.validation.failed_runs} failed"
+    )
     typer.echo()
 
     # Fingerprints
@@ -367,7 +383,7 @@ def show(
     typer.echo()
 
     # Placement
-    typer.echo(f"  Placement:")
+    typer.echo("  Placement:")
     typer.echo(f"    Backend:       {profile.placement.backend}")
     typer.echo(f"    Devices:       {profile.placement.devices or '[]'}")
     typer.echo(f"    Split mode:    {profile.placement.split_mode.value}")
@@ -375,7 +391,7 @@ def show(
     typer.echo()
 
     # Execution
-    typer.echo(f"  Execution:")
+    typer.echo("  Execution:")
     typer.echo(f"    GPU layers:    {profile.gpu_layers}")
     typer.echo(f"    Threads:       {profile.threads}")
     typer.echo(f"    Threads batch: {profile.threads_batch}")
@@ -397,7 +413,7 @@ def show(
     typer.echo()
 
     # Memory
-    typer.echo(f"  Memory:")
+    typer.echo("  Memory:")
     typer.echo(f"    Estimated:     {profile.estimated_memory_mb:.0f} MB")
     typer.echo(f"    Peak actual:   {profile.actual_peak_memory_mb:.0f} MB")
     typer.echo(f"    Safety margin: {profile.safety_margin_mb:.0f} MB")
@@ -414,7 +430,9 @@ def show(
 @app.command("validate")
 def validate(
     model: str = typer.Option(
-        ..., "--model", "-m",
+        ...,
+        "--model",
+        "-m",
         help="Model ID (number) to validate.",
     ),
 ) -> None:
@@ -474,13 +492,13 @@ def validate(
     if status == ValidationStatus.READY:
         typer.echo(f"  ✓ Status:   READY ({profile.validation.successful_runs} successful runs)")
     elif status == ValidationStatus.STALE:
-        typer.echo(f"  ⚠ Status:   STALE — revalidation recommended")
+        typer.echo("  ⚠ Status:   STALE — revalidation recommended")
     elif status == ValidationStatus.FAILED:
-        typer.echo(f"  ✗ Status:   FAILED — reoptimization required")
+        typer.echo("  ✗ Status:   FAILED — reoptimization required")
         for reason in profile.validation.failure_reasons:
             typer.echo(f"    Reason: {reason}")
     else:
-        typer.echo(f"  ? Status:   UNKNOWN")
+        typer.echo("  ? Status:   UNKNOWN")
 
     typer.echo()
 

@@ -12,8 +12,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from polymind.core.confidence.artifact import load_all_domains, load_confidence
-from polymind.core.model.registry import ModelRegistry
+from polymind.core.confidence.artifact import load_confidence
 
 app = typer.Typer()
 console = Console()
@@ -108,9 +107,7 @@ def show_capability(
         for mid, conf in scores.items():
             data[mid] = {
                 "overall": conf.overall_score,
-                "domains": {
-                    did: ds.overall for did, ds in conf.domains.items()
-                },
+                "domains": {did: ds.overall for did, ds in conf.domains.items()},
             }
         typer.echo(json.dumps(data, indent=2))
         return
@@ -121,12 +118,12 @@ def show_capability(
 
     table = Table(show_lines=True)
     table.add_column("Domain", style="cyan", width=20)
-    for mid, conf in sorted(scores.items(), key=lambda x: float(x[0])):
-        table.add_column(f"Model {mid}", justify="right", width=12)
+    for _mid, _conf in sorted(scores.items(), key=lambda x: float(x[0])):
+        table.add_column(f"Model {_mid}", justify="right", width=12)
 
     for domain_id in sorted_domains:
         row: list[str] = [domain_id]
-        for mid, conf in sorted(scores.items(), key=lambda x: float(x[0])):
+        for _mid, conf in sorted(scores.items(), key=lambda x: float(x[0])):
             ds = conf.domains.get(domain_id)
             if ds is not None:
                 score = ds.overall
@@ -144,7 +141,7 @@ def show_capability(
 
     # Overall row
     row = ["[bold]Overall[/bold]"]
-    for mid, conf in sorted(scores.items(), key=lambda x: float(x[0])):
+    for _mid, conf in sorted(scores.items(), key=lambda x: float(x[0])):
         row.append(f"[bold]{conf.overall_score:>6.1f}%[/bold]")
     table.add_row(*row)
 
