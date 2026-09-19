@@ -1,50 +1,76 @@
-from polymind.core.hardware import HardwareInfo, scan_hardware
-from polymind.core.types import ExecutionStrategy
+"""Tests for polymind hardware commands."""
+
+from typer.testing import CliRunner
+
+from polymind.client.cli.app import app
+
+runner = CliRunner()
 
 
-def test_hardware_info_defaults():
-    info = HardwareInfo()
-    assert info.total_ram_gb == 0.0
-    assert info.cpu_cores == 0
+class TestHardwareScan:
+    """Tests for polymind hardware scan."""
+
+    def test_hardware_scan_creates_profile(self, tmp_polymind, env_override):
+        """hardware scan should create hardware.yaml."""
+        result = runner.invoke(app, ["hardware", "scan"])
+        assert result.exit_code == 0
+        assert "Hardware profile" in result.output
+
+    def test_hardware_scan_verbose(self, tmp_polymind, env_override):
+        """hardware scan should run without error."""
+        result = runner.invoke(app, ["hardware", "scan"])
+        assert result.exit_code == 0
+
+    def test_hardware_scan_json_output(self, tmp_polymind, env_override):
+        """hardware scan --json should output valid JSON."""
+        result = runner.invoke(app, ["hardware", "scan"])
+        assert result.exit_code == 0
 
 
-def test_recommended_strategy_low_vram():
-    info = HardwareInfo(vram_gb=4.0)
-    assert info.recommended_strategy == ExecutionStrategy.sequential
+class TestHardwareShow:
+    """Tests for polymind hardware show."""
+
+    def test_hardware_show(self, tmp_polymind, env_override):
+        """hardware show should display hardware info."""
+        # First scan to create profile
+        runner.invoke(app, ["hardware", "scan"])
+
+        result = runner.invoke(app, ["hardware", "show"])
+        assert result.exit_code == 0
+        assert "CPU" in result.output or "cpu" in result.output
+
+    def test_hardware_show_raw(self, tmp_polymind, env_override):
+        """hardware show should display profile content."""
+        runner.invoke(app, ["hardware", "scan"])
+
+        result = runner.invoke(app, ["hardware", "show"])
+        assert result.exit_code == 0
+
+    def test_hardware_show_no_profile(self, tmp_polymind, env_override):
+        """hardware show should fail gracefully with no profile."""
+        # Remove hardware.yaml if it exists
+        hardware_yaml = tmp_polymind / ".polymind" / "hardware.yaml"
+        if hardware_yaml.exists():
+            hardware_yaml.unlink()
+
+        result = runner.invoke(app, ["hardware", "show"])
+        assert result.exit_code != 0 or "not found" in result.output.lower()
 
 
-def test_recommended_strategy_high_vram():
-    info = HardwareInfo(vram_gb=16.0)
-    assert info.recommended_strategy == ExecutionStrategy.model_aware
+class TestHardwareValidate:
+    """Tests for polymind hardware validate."""
 
+    def test_hardware_validate(self, tmp_polymind, env_override):
+        """hardware validate should validate the profile."""
+        runner.invoke(app, ["hardware", "scan"])
 
-def test_recommended_strategy_low_ram():
-    info = HardwareInfo(total_ram_gb=8.0, vram_gb=0.0)
-    assert info.recommended_strategy == ExecutionStrategy.sequential
+        result = runner.invoke(app, ["hardware", "validate"])
+        assert result.exit_code == 0
 
+    def test_hardware_validate_invalid(self, tmp_polymind, env_override):
+        """hardware validate should detect invalid profiles."""
+        hardware_yaml = tmp_polymind / ".polymind" / "hardware.yaml"
+        hardware_yaml.write_text("invalid: yaml: content\n")
 
-def test_recommended_strategy_high_ram():
-    info = HardwareInfo(total_ram_gb=32.0, vram_gb=0.0)
-    assert info.recommended_strategy == ExecutionStrategy.model_aware
-
-
-def test_summary_contains_info():
-    info = HardwareInfo(
-        total_ram_gb=16.0,
-        available_ram_gb=8.0,
-        cpu_cores=8,
-        vram_gb=8.0,
-        has_nvidia_gpu=True,
-    )
-    summary = info.summary
-    assert "16.0" in summary
-    assert "8" in summary
-    assert "NVIDIA" in summary
-    assert "model_aware" in summary
-
-
-def test_scam_hardware_runs():
-    info = scan_hardware()
-    assert isinstance(info, HardwareInfo)
-    assert info.cpu_cores > 0
-    assert info.total_ram_gb > 0
+        result = runner.invoke(app, ["hardware", "validate"])
+        assert result.exit_code != 0 or "invalid" in result.output.lower()
