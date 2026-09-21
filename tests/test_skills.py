@@ -30,6 +30,8 @@ from polymind.core.skills.types import (
     SkillManifest,
     SkillParam,
     SkillResult,
+    SkillSource,
+    SkillStatus,
     StepStatus,
 )
 
@@ -577,3 +579,218 @@ class TestLlamaProvider:
         result = provider.complete(messages=[{"role": "user", "content": "hi"}])
         assert "choices" in result
         mock_llm.create_chat_completion.assert_called_once()
+
+
+# ── SkillSource / SkillStatus tests ─────────────────────
+
+
+class TestSkillSourceAndStatus:
+    def test_skill_source_values(self):
+        assert SkillSource.BUILTIN == "builtin"
+        assert SkillSource.USER == "user"
+        assert SkillSource.MCP == "mcp"
+        assert SkillSource.PLUGIN == "plugin"
+
+    def test_skill_status_values(self):
+        assert SkillStatus.ENABLED == "enabled"
+        assert SkillStatus.DISABLED == "disabled"
+        assert SkillStatus.ERROR == "error"
+
+    def test_manifest_has_source_and_status(self):
+        m = SkillManifest(name="test", description="test")
+        assert m.source == SkillSource.BUILTIN
+        assert m.status == SkillStatus.ENABLED
+
+    def test_manifest_source_detail(self):
+        m = SkillManifest(name="test", description="test", source_detail="mcp:filesystem")
+        assert m.source_detail == "mcp:filesystem"
+
+
+# ── Enable / Disable tests ──────────────────────────────
+
+
+class TestEnableDisable:
+    def test_disable_builtin_skill(self):
+        registry = SkillRegistry()
+        registry.discover()
+        assert registry.disable("read_file") is True
+        manifest = registry.get_manifest("read_file")
+        assert manifest.status == SkillStatus.DISABLED
+
+    def test_enable_disabled_skill(self):
+        registry = SkillRegistry()
+        registry.discover()
+        registry.disable("shell")
+        assert registry.enable("shell") is True
+        manifest = registry.get_manifest("shell")
+        assert manifest.status == SkillStatus.ENABLED
+
+    def test_disable_nonexistent(self):
+        registry = SkillRegistry()
+        registry.discover()
+        assert registry.disable("nonexistent") is False
+
+    def test_enable_nonexistent(self):
+        registry = SkillRegistry()
+        registry.discover()
+        assert registry.enable("nonexistent") is False
+
+    def test_list_enabled_excludes_disabled(self):
+        registry = SkillRegistry()
+        registry.discover()
+        registry.disable("shell")
+        enabled = registry.list_enabled()
+        assert all(m.name != "shell" for m in enabled)
+
+    def test_list_disabled(self):
+        registry = SkillRegistry()
+        registry.discover()
+        registry.disable("shell")
+        disabled = registry.list_disabled()
+        assert any(m.name == "shell" for m in disabled)
+
+    def test_list_enabled_names(self):
+        registry = SkillRegistry()
+        registry.discover()
+        names = registry.list_enabled_names()
+        assert "read_file" in names
+        assert "shell" in names
+
+    def test_list_by_source(self):
+        registry = SkillRegistry()
+        registry.discover()
+        builtin = registry.list_by_source(SkillSource.BUILTIN)
+        assert len(builtin) >= 9
+        assert all(m.source == SkillSource.BUILTIN for m in builtin)
+
+    def test_system_prompt_excludes_disabled(self):
+        registry = SkillRegistry()
+        registry.discover()
+        registry.disable("shell")
+        prompt = registry.to_system_prompt_tools()
+        assert "shell" not in prompt
+
+    def test_openai_tools_excludes_disabled(self):
+        registry = SkillRegistry()
+        registry.discover()
+        registry.disable("shell")
+        tools = registry.to_openai_tools()
+        tool_names = [t["function"]["name"] for t in tools]
+        assert "shell" not in tool_names
+
+    def test_persist_state(self, tmp_path, monkeypatch):
+        """Test that enable/disable state persists to config file."""
+        from polymind.core.skills import registry as reg_module
+
+        monkeypatch.setattr(reg_module, "artifact_dir", lambda: tmp_path)
+        # Ensure the skills dir doesn't interfere
+        reg_module._save_skills_config({
+            "shell": {"status": "disabled", "source": "builtin"},
+            "read_file": {"status": "enabled", "source": "builtin"},
+        })
+
+        loaded = reg_module._load_skills_config()
+        assert loaded["shell"]["status"] == "disabled"
+        assert loaded["read_file"]["status"] == "enabled"
+
+
+# ── MCP integration tests ───────────────────────────────
+
+
+class TestMcpClient:
+    def test_manifest_from_mcp_tool(self):
+        from polymind.core.skills.registry import _manifest_from_mcp_tool
+
+        tool_info = {
+            "name": "read_file",
+            "description": "Read a file from the filesystem",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File path to read"},
+                },
+                "required": ["path"],
+            },
+        }
+        manifest = _manifest_from_mcp_tool(tool_info, "filesystem")
+        assert manifest.name == "read_file"
+        assert manifest.source == SkillSource.MCP
+        assert manifest.source_detail == "mcp:filesystem"
+        assert len(manifest.params) == 1
+        assert manifest.params[0].name == "path"
+        assert manifest.params[0].required is True
+
+    def test_manifest_from_mcp_tool_with_optional_params(self):
+        from polymind.core.skills.registry import _manifest_from_mcp_tool
+
+        tool_info = {
+            "name": "search",
+            "description": "Search files",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "limit": {"type": "integer", "description": "Max results", "default": 10},
+                },
+                "required": ["query"],
+            },
+        }
+        manifest = _manifest_from_mcp_tool(tool_info, "search-server")
+        assert len(manifest.params) == 2
+        query_param = next(p for p in manifest.params if p.name == "query")
+        limit_param = next(p for p in manifest.params if p.name == "limit")
+        assert query_param.required is True
+        assert limit_param.required is False
+        assert limit_param.default == 10
+
+    def test_mcp_config_persistence(self, tmp_path, monkeypatch):
+        from polymind.core.skills import registry as reg_module
+
+        monkeypatch.setattr(reg_module, "artifact_dir", lambda: tmp_path)
+
+        servers = {
+            "filesystem": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+                "enabled": True,
+            }
+        }
+        reg_module._save_mcp_config(servers)
+
+        loaded = reg_module._load_mcp_config()
+        assert "filesystem" in loaded
+        assert loaded["filesystem"]["command"] == "npx"
+
+    def test_mcp_tool_skill_execute(self):
+        """Test that _McpToolSkill correctly calls call_mcp_tool."""
+        from polymind.core.skills.registry import _McpToolSkill
+
+        tool_info = {
+            "name": "test_tool",
+            "description": "A test tool",
+            "inputSchema": {"type": "object", "properties": {}},
+        }
+        skill = _McpToolSkill(tool_info, "test-server")
+        manifest = skill.manifest()
+        assert manifest.name == "test_tool"
+        assert manifest.source == SkillSource.MCP
+
+    def test_list_mcp_tools_empty_config(self):
+        """Test that list_mcp_tools handles missing server gracefully."""
+        from polymind.core.skills.mcp_client import list_mcp_tools
+
+        # Non-existent command should return empty list
+        result = list_mcp_tools({"command": "nonexistent_command_xyz", "args": []})
+        assert result == []
+
+    def test_call_mcp_tool_missing_server(self):
+        """Test that call_mcp_tool handles missing server gracefully."""
+        from polymind.core.skills.mcp_client import call_mcp_tool
+
+        result = call_mcp_tool(
+            {"command": "nonexistent_command_xyz", "args": []},
+            "test_tool",
+            {},
+        )
+        assert not result.success
+        assert "error" in result.error.lower()

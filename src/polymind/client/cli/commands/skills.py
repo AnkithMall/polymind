@@ -15,36 +15,62 @@ console = Console()
 
 
 @app.command("list")
-def list_skills() -> None:
+def list_skills(
+    source: str = typer.Option("", "--source", "-s", help="Filter by source: builtin, user, mcp"),
+    all: bool = typer.Option(False, "--all", "-a", help="Show disabled skills too"),
+) -> None:
     """List all available skills."""
     from polymind.core.skills.registry import SkillRegistry
+    from polymind.core.skills.types import SkillSource
 
     registry = SkillRegistry()
     registry.discover()
 
-    manifests = registry.list_skills()
+    if all:
+        manifests = registry.list_skills()
+    else:
+        manifests = registry.list_enabled()
+
+    if source:
+        try:
+            src = SkillSource(source)
+            manifests = [m for m in manifests if m.source == src]
+        except ValueError:
+            console.print(f"[red]Unknown source '{source}'. Use: builtin, user, mcp[/]")
+            raise typer.Exit(code=1)
+
     if not manifests:
         console.print("[yellow]No skills available.[/]")
         return
 
     table = Table(show_header=True, header_style="bold")
     table.add_column("Name", style="cyan", width=20)
-    table.add_column("Description", width=50)
-    table.add_column("Permissions", width=20)
+    table.add_column("Status", width=10)
+    table.add_column("Source", width=10)
+    table.add_column("Description", width=45)
+    table.add_column("Permissions", width=18)
     table.add_column("Approval", width=10)
 
     for m in manifests:
+        status_icon = "✓" if m.status.value == "enabled" else "✗"
+        status_style = "green" if m.status.value == "enabled" else "dim"
         perms = ", ".join(p.value for p in m.permissions) or "—"
         approval = "⚠️ Yes" if m.requires_approval else "No"
+        desc = m.description[:45] + "…" if len(m.description) > 45 else m.description
+
         table.add_row(
             m.name,
-            m.description[:50] + "…" if len(m.description) > 50 else m.description,
+            f"[{status_style}]{status_icon} {m.status.value}[/]",
+            m.source.value,
+            desc,
             perms,
             approval,
         )
 
     console.print(table)
-    console.print(f"\n[dim]{len(manifests)} skill(s) available[/]")
+    total = len(registry.list_skills())
+    enabled = len(registry.list_enabled())
+    console.print(f"\n[dim]{enabled}/{total} skill(s) enabled[/]")
 
 
 @app.command("show")
@@ -60,8 +86,14 @@ def show_skill(name: str = typer.Argument(help="Skill name")) -> None:
         console.print(f"[red]Skill '{name}' not found.[/]")
         raise typer.Exit(code=1)
 
+    status_color = "green" if manifest.status.value == "enabled" else "red"
+
     lines = [
         f"[bold]Name:[/] {manifest.name}",
+        f"[bold]Status:[/] [{status_color}]{manifest.status.value}[/]",
+        f"[bold]Source:[/] {manifest.source.value}" + (
+            f" ({manifest.source_detail})" if manifest.source_detail else ""
+        ),
         f"[bold]Version:[/] {manifest.version}",
         f"[bold]Author:[/] {manifest.author}",
         f"[bold]Description:[/] {manifest.description}",
@@ -90,6 +122,97 @@ def show_skill(name: str = typer.Argument(help="Skill name")) -> None:
     lines.append(f"[bold]Requires approval:[/] {'Yes' if manifest.requires_approval else 'No'}")
 
     console.print(Panel("\n".join(lines), title=f"Skill: {manifest.name}", border_style="cyan"))
+
+
+@app.command("status")
+def skill_status() -> None:
+    """Show status of all skills — installed, enabled, source, and health."""
+    from polymind.core.skills.registry import SkillRegistry
+    from polymind.core.skills.types import SkillSource
+
+    registry = SkillRegistry()
+    registry.discover()
+
+    all_manifests = registry.list_skills()
+    enabled = registry.list_enabled()
+    disabled = registry.list_disabled()
+
+    # Summary panel
+    builtin = registry.list_by_source(SkillSource.BUILTIN)
+    user = registry.list_by_source(SkillSource.USER)
+    mcp = registry.list_by_source(SkillSource.MCP)
+
+    summary = Table(show_header=False, box=None, padding=(0, 2))
+    summary.add_column("Metric", style="bold")
+    summary.add_column("Value")
+    summary.add_row("Total skills", str(len(all_manifests)))
+    summary.add_row("[green]Enabled[/]", str(len(enabled)))
+    summary.add_row("[dim]Disabled[/]", str(len(disabled)))
+    summary.add_row("Built-in", str(len(builtin)))
+    summary.add_row("User-installed", str(len(user)))
+    summary.add_row("MCP servers", str(len(mcp)))
+
+    console.print(Panel(summary, title="Skills Status", border_style="cyan"))
+
+    # Per-source breakdown
+    for source_label, source_val in [
+        ("Built-in Skills", SkillSource.BUILTIN),
+        ("User Skills", SkillSource.USER),
+        ("MCP Skills", SkillSource.MCP),
+    ]:
+        skills = registry.list_by_source(source_val)
+        if not skills:
+            continue
+
+        table = Table(show_header=True, header_style="bold", box=None)
+        table.add_column("Name", style="cyan", width=20)
+        table.add_column("Status", width=10)
+        table.add_column("Description", width=50)
+
+        for m in skills:
+            status_icon = "✓" if m.status.value == "enabled" else "✗"
+            status_style = "green" if m.status.value == "enabled" else "dim"
+            desc = m.description[:50] + "…" if len(m.description) > 50 else m.description
+            table.add_row(
+                m.name,
+                f"[{status_style}]{status_icon} {m.status.value}[/]",
+                desc,
+            )
+
+        console.print(Panel(table, title=source_label, border_style="dim"))
+
+    # Check for errors
+    error_skills = [m for m in all_manifests if m.status.value == "error"]
+    if error_skills:
+        console.print("\n[bold red]Skills with errors:[/]")
+        for m in error_skills:
+            console.print(f"  ✗ {m.name}: {m.source_detail or 'unknown error'}")
+
+
+@app.command("enable")
+def enable_skill(name: str = typer.Argument(help="Skill name to enable")) -> None:
+    """Enable a skill."""
+    from polymind.core.skills.registry import SkillRegistry
+
+    registry = SkillRegistry()
+    if registry.enable(name):
+        console.print(f"[green]✓ Enabled skill '{name}'[/]")
+    else:
+        console.print(f"[red]Skill '{name}' not found.[/]")
+        raise typer.Exit(code=1)
+
+
+@app.command("disable")
+def disable_skill(name: str = typer.Argument(help="Skill name to disable")) -> None:
+    """Disable a skill."""
+    from polymind.core.skills.registry import SkillRegistry
+
+    registry = SkillRegistry()
+    if registry.disable(name):
+        console.print(f"[yellow]✗ Disabled skill '{name}'[/]")
+    else:
+        console.print(f"[red]Skill '{name}' not found.[/]")
+        raise typer.Exit(code=1)
 
 
 @app.command("test")
@@ -134,21 +257,16 @@ def run_agent(
     approve: bool = typer.Option(False, "--approve", help="Auto-approve all tool calls"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show agent reasoning steps"),
 ) -> None:
-    """Run the agent loop with skills enabled.
-
-    The agent will reason about your prompt and use tools as needed.
-    """
+    """Run the agent loop with skills enabled."""
     from polymind.core.model.registry import ModelRegistry
     from polymind.core.runtime.artifact import load_runtime_config
     from polymind.core.skills.agent import AgentConfig, AgentLoop, LlamaProvider
     from polymind.core.skills.registry import SkillRegistry
     from polymind.core.skills.sandbox import SandboxConfig
 
-    # Discover skills
     skill_registry = SkillRegistry()
     skill_registry.discover()
 
-    # Find the model
     model_reg = ModelRegistry()
     models = model_reg.load()
 
@@ -156,7 +274,6 @@ def run_agent(
         console.print("[red]No models installed. Run: polymind model download[/]")
         raise typer.Exit(code=1)
 
-    # Select model
     selected = None
     if model_id:
         for m in models:
@@ -167,14 +284,13 @@ def run_agent(
             console.print(f"[red]Model '{model_id}' not found.[/]")
             raise typer.Exit(code=1)
     else:
-        # Use the first/largest model
         selected = models[0]
 
+    enabled_names = skill_registry.list_enabled_names()
     console.print(f"[dim]Using model: {selected.filename}[/]")
-    console.print(f"[dim]Skills available: {', '.join(skill_registry.list_names())}[/]")
+    console.print(f"[dim]Skills enabled: {', '.join(enabled_names)}[/]")
     console.print()
 
-    # Load the model
     from llama_cpp import Llama
 
     config = load_runtime_config(str(selected.id))
@@ -206,12 +322,10 @@ def run_agent(
 
     provider = LlamaProvider(llm)
 
-    # Sandbox config
     sandbox_cfg = SandboxConfig()
     if approve:
-        sandbox_cfg.auto_approved_skills = list(skill_registry.list_names())
+        sandbox_cfg.auto_approved_skills = enabled_names
 
-    # Agent config
     agent_cfg = AgentConfig(
         verbose=verbose,
         approval_callback=lambda name, perm, args: (
@@ -219,7 +333,6 @@ def run_agent(
         ),
     )
 
-    # Run the agent
     agent = AgentLoop(provider, skill_registry, sandbox_cfg, agent_cfg)
 
     console.print("[bold cyan]Polymind Agent[/] (skills-enabled)")
@@ -228,7 +341,6 @@ def run_agent(
 
     result = agent.run(prompt, context={"working_dir": str(Path.cwd())})
 
-    # Show steps if verbose
     if verbose and result.steps:
         for step in result.steps:
             if step.tool_name:
@@ -238,7 +350,6 @@ def run_agent(
                     f"{step.tool_name}({json.dumps(step.tool_args)[:80]})"
                 )
 
-    # Show final response
     console.print()
     console.print(Panel(result.response, title="Response", border_style="green"))
 
@@ -250,7 +361,7 @@ def run_agent(
 def install_skill(
     path: str = typer.Argument(help="Path to skill .py file or directory"),
 ) -> None:
-    """Install a user skill to ~/.polymind/skills/."""
+    """Install a user skill to .polymind/skills/."""
     from polymind.core.paths import artifact_dir
 
     source = Path(path)
@@ -271,6 +382,126 @@ def install_skill(
         shutil.copytree(source, dest, dirs_exist_ok=True)
 
     console.print(f"[green]Skill installed to {dest}[/]")
+
+
+# ── MCP sub-commands ────────────────────────────────────
+
+mcp_app = typer.Typer(help="Manage MCP (Model Context Protocol) servers.")
+app.add_typer(mcp_app, name="mcp")
+
+
+@mcp_app.command("add")
+def mcp_add(
+    name: str = typer.Argument(help="Server name (e.g., 'filesystem')"),
+    command: str = typer.Option(..., "--command", "-c", help="Command to run (e.g., npx, python)"),
+    args: str = typer.Option("[]", "--args", help="JSON array of arguments"),
+    env: str = typer.Option("{}", "--env", help="JSON object of environment variables"),
+    cwd: str = typer.Option("", "--cwd", help="Working directory for the server"),
+) -> None:
+    """Add an MCP server.
+
+    Examples:
+        polymind skills mcp add filesystem --command npx --args '["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]'
+        polymind skills mcp add github --command npx --args '["-y", "@modelcontextprotocol/server-github"]'
+    """
+    from polymind.core.skills.registry import _load_mcp_config, _save_mcp_config
+
+    try:
+        args_list = json.loads(args)
+        env_dict = json.loads(env)
+    except json.JSONDecodeError:
+        console.print("[red]Invalid JSON in --args or --env[/]")
+        raise typer.Exit(code=1)
+
+    servers = _load_mcp_config()
+    servers[name] = {
+        "command": command,
+        "args": args_list,
+        "env": env_dict if env_dict else None,
+        "cwd": cwd or None,
+        "enabled": True,
+    }
+    _save_mcp_config(servers)
+    console.print(f"[green]✓ Added MCP server '{name}'[/]")
+    console.print(f"[dim]  Command: {command} {' '.join(args_list)}[/]")
+    console.print("[dim]  Run 'polymind skills mcp list' to see status[/]")
+
+
+@mcp_app.command("list")
+def mcp_list() -> None:
+    """List configured MCP servers and their tools."""
+    from polymind.core.skills.registry import SkillRegistry, _load_mcp_config
+    from polymind.core.skills.types import SkillSource
+
+    servers = _load_mcp_config()
+    if not servers:
+        console.print("[yellow]No MCP servers configured.[/]")
+        console.print("[dim]Add one with: polymind skills mcp add <name> --command <cmd> --args '[...]''[/]")
+        return
+
+    registry = SkillRegistry()
+    registry.discover()
+
+    for server_name, cfg in servers.items():
+        status = "✓ enabled" if cfg.get("enabled", True) else "✗ disabled"
+        status_style = "green" if cfg.get("enabled", True) else "dim"
+
+        console.print(f"\n[bold]MCP Server: {server_name}[/] [{status_style}]{status}[/]")
+        console.print(f"  Command: {cfg.get('command', '')} {' '.join(cfg.get('args', []))}")
+
+        # Show tools from this server
+        mcp_skills = [
+            m for m in registry.list_skills()
+            if m.source == SkillSource.MCP and m.source_detail == f"mcp:{server_name}"
+        ]
+        if mcp_skills:
+            console.print(f"  Tools ({len(mcp_skills)}):")
+            for m in mcp_skills:
+                status_icon = "✓" if m.status.value == "enabled" else "✗"
+                console.print(f"    {status_icon} {m.name}: {m.description[:60]}")
+        else:
+            console.print("  [dim]No tools discovered (server may not be running)[/]")
+
+
+@mcp_app.command("remove")
+def mcp_remove(name: str = typer.Argument(help="Server name to remove")) -> None:
+    """Remove an MCP server."""
+    from polymind.core.skills.registry import _load_mcp_config, _save_mcp_config
+
+    servers = _load_mcp_config()
+    if name not in servers:
+        console.print(f"[red]MCP server '{name}' not found.[/]")
+        raise typer.Exit(code=1)
+
+    del servers[name]
+    _save_mcp_config(servers)
+    console.print(f"[yellow]Removed MCP server '{name}'[/]")
+
+
+@mcp_app.command("test")
+def mcp_test(
+    name: str = typer.Argument(help="Server name to test"),
+) -> None:
+    """Test connection to an MCP server and list its tools."""
+    from polymind.core.skills.mcp_client import list_mcp_tools
+    from polymind.core.skills.registry import _load_mcp_config
+
+    servers = _load_mcp_config()
+    if name not in servers:
+        console.print(f"[red]MCP server '{name}' not found.[/]")
+        raise typer.Exit(code=1)
+
+    cfg = servers[name]
+    console.print(f"[dim]Connecting to MCP server '{name}'...[/]")
+
+    tools = list_mcp_tools(cfg)
+    if tools:
+        console.print(f"[green]✓ Connected! Found {len(tools)} tool(s):[/]")
+        for t in tools:
+            console.print(f"  • {t['name']}: {t.get('description', '')[:60]}")
+    else:
+        console.print("[red]✗ Failed to connect or no tools found.[/]")
+        console.print("[dim]  Make sure the server command is correct and dependencies are installed.[/]")
 
 
 def _ask_approval(skill_name: str, permission: str, args: dict) -> bool:

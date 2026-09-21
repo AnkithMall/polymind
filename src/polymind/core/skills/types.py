@@ -18,6 +18,23 @@ class Permission(StrEnum):
     APPROVAL = "approval"  # Requires user approval before execution
 
 
+class SkillSource(StrEnum):
+    """Where a skill comes from."""
+
+    BUILTIN = "builtin"  # Ships with polymind
+    USER = "user"  # Installed by user to .polymind/skills/
+    MCP = "mcp"  # Discovered from an MCP server
+    PLUGIN = "plugin"  # Installed via plugin system
+
+
+class SkillStatus(StrEnum):
+    """Whether a skill is enabled or disabled."""
+
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    ERROR = "error"  # Failed to load
+
+
 class SandboxPolicy(StrEnum):
     """Sandbox enforcement policies."""
 
@@ -99,6 +116,9 @@ class SkillManifest:
     timeout_seconds: int = 30
     requires_approval: bool = False
     sandbox_policy: SandboxPolicy = SandboxPolicy.BASIC
+    source: SkillSource = SkillSource.BUILTIN
+    status: SkillStatus = SkillStatus.ENABLED
+    source_detail: str = ""  # e.g. MCP server name, file path
 
     def to_tool_description(self) -> str:
         """Format as a tool description for the LLM system prompt."""

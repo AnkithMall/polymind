@@ -20,8 +20,10 @@ Usage:
 
 from polymind.core.skills.agent import AgentLoop, AgentResult, AgentStep
 from polymind.core.skills.base import Skill, SkillContext, SkillResult
+from polymind.core.skills.mcp_client import call_mcp_tool, list_mcp_tools
 from polymind.core.skills.registry import SkillRegistry
 from polymind.core.skills.sandbox import SandboxConfig, SandboxPolicy
+from polymind.core.skills.types import SkillSource, SkillStatus
 
 __all__ = [
     "AgentLoop",
@@ -33,4 +35,8 @@ __all__ = [
     "SkillContext",
     "SkillRegistry",
     "SkillResult",
+    "SkillSource",
+    "SkillStatus",
+    "call_mcp_tool",
+    "list_mcp_tools",
 ]
