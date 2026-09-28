@@ -9,11 +9,11 @@ Hardware-aware local LLM toolkit that auto-optimizes runtime configs, ranks mode
 
 ---
 
-## Demo Video
+## Introduction
 
-[![PolyMind Demo Video](https://img.youtube.com/vi/3769xiUc9_4/maxresdefault.jpg)](https://www.youtube.com/watch?v=3769xiUc9_4?si=BTcGE7rn8WzK1_qs)
+[![PolyMind Introduction Video](https://img.youtube.com/vi/3769xiUc9_4/maxresdefault.jpg)](https://www.youtube.com/watch?v=3769xiUc9_4?si=BTcGE7rn8WzK1_qs)
 
-> ▶️ **[Watch the demo on YouTube](https://www.youtube.com/watch?v=3769xiUc9_4?si=BTcGE7rn8WzK1_qs)**
+> ▶️ **[Watch the introduction on YouTube](https://www.youtube.com/watch?v=3769xiUc9_4?si=BTcGE7rn8WzK1_qs)**
 
 ---
 
