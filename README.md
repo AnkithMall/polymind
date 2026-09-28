@@ -9,6 +9,14 @@ Hardware-aware local LLM toolkit that auto-optimizes runtime configs, ranks mode
 
 ---
 
+## Demo Video
+
+[![PolyMind Demo Video](https://img.youtube.com/vi/3769xiUc9_4/maxresdefault.jpg)](https://www.youtube.com/watch?v=3769xiUc9_4?si=BTcGE7rn8WzK1_qs)
+
+> ▶️ **[Watch the demo on YouTube](https://www.youtube.com/watch?v=3769xiUc9_4?si=BTcGE7rn8WzK1_qs)**
+
+---
+
 ## The problem
 
 Running LLMs locally is hard. You need to:
